@@ -47,7 +47,7 @@ func extractTextFromPDF(filePath string) (string, error) {
 
 	var text strings.Builder
 	pageCount := doc.PageCount()
-	for i := 0; i < pageCount; i++ {
+	for i := 1; i <= pageCount; i++ {
 		pageText, err := doc.ExtractTextFromPage(i)
 		if err != nil {
 			return "", fmt.Errorf("failed to extract text from page %d: %w", i, err)
