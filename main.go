@@ -1,10 +1,150 @@
 package main
 
 import (
-	// pdfcpu will be used by internal/extractor in future tasks
-	_ "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"github.com/welworx/flatex-pdf-cli/internal/extractor"
+	"github.com/welworx/flatex-pdf-cli/internal/parser"
+	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
 func main() {
-	// TODO: Implement CLI entry point
+	outputFile := flag.String("o", "", "output file (stdout if not provided)")
+	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
+	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) == 0 {
+		printUsage()
+		os.Exit(1)
+	}
+
+	path := args[0]
+
+	// Discover all PDFs
+	pdfFiles, err := discoverPDFs(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error discovering PDFs: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(pdfFiles) == 0 {
+		fmt.Fprintf(os.Stderr, "no PDF files found in %s\n", path)
+		os.Exit(1)
+	}
+
+	// Process PDFs and collect transactions
+	var transactions []*schema.Transaction
+	var metadata *schema.DocumentMetadata
+
+	for _, pdfPath := range pdfFiles {
+		// Extract text and metadata
+		doc, err := extractor.ExtractPDF(pdfPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error extracting %s: %v\n", pdfPath, err)
+			os.Exit(1)
+		}
+
+		// Parse transaction
+		txn, err := parser.Parse(doc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error parsing %s: %v\n", pdfPath, err)
+			os.Exit(1)
+		}
+
+		// Add source if flag is set
+		if *includeSource {
+			txn.Source = doc.Filename
+		}
+
+		transactions = append(transactions, txn)
+
+		// Capture metadata from first file
+		if metadata == nil && (doc.DepotNumber != "" || doc.DepotHolder != "") {
+			metadata = &schema.DocumentMetadata{
+				DepotNumber: doc.DepotNumber,
+				DepotHolder: doc.DepotHolder,
+			}
+		}
+	}
+
+	// Format output
+	var output interface{}
+	if *includeMetadata {
+		output = &schema.Output{
+			Metadata:     metadata,
+			Transactions: transactions,
+		}
+	} else {
+		output = transactions
+	}
+
+	// Marshal to JSON
+	jsonData, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error marshaling JSON: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Write to file or stdout
+	if *outputFile != "" {
+		err := os.WriteFile(*outputFile, jsonData, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error writing to file: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		fmt.Println(string(jsonData))
+	}
+
+	os.Exit(0)
 }
+
+// discoverPDFs finds all PDF files recursively in the given path.
+func discoverPDFs(path string) ([]string, error) {
+	var pdfFiles []string
+
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() && filepath.Ext(filePath) == ".pdf" {
+			pdfFiles = append(pdfFiles, filePath)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort for deterministic output
+	sort.Strings(pdfFiles)
+
+	return pdfFiles, nil
+}
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, `Usage: %s [options] <path>
+
+Process PDF files from flatex and extract transaction data.
+
+Options:
+  -o FILE              output file (stdout if not provided)
+  --include-source     add source filename to each transaction
+  --include-metadata   wrap output with depot metadata
+  -h, --help           show this help message
+
+Arguments:
+  <path>               path to PDF file or directory containing PDFs
+`, os.Args[0])
+}
+
