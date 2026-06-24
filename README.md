@@ -90,6 +90,21 @@ The tool automatically detects and parses the following flatex document types:
 - **INTEREST** — Interest payment notices on cash accounts
 - **THESAURIERUNG** — Reinvestment notices for dividend reinvestment
 
+## Language Support
+
+**German PDFs only.** All document-type detection and field extraction is keyed
+to German labels (`Wertpapierabrechnung`, `Ertragsmitteilung`, `Valuta`,
+`Devisenkurs`, …) and the German number format (`1.234,56`).
+
+- ✅ **German** flatexDEGIRO statements — fully supported.
+- ❌ **English** (or any non-German) statements — **not implemented.** Such files
+  are detected and rejected with an error rather than silently mis-parsed:
+  `unsupported document language: only German flatex PDFs are implemented`.
+
+Numbers are parsed format-agnostically (both `1.234,56` and `1,234.56` are
+accepted), so the German requirement is purely about field labels and keywords.
+Adding English support requires a real English sample to map the English labels.
+
 ## Output Format
 
 ### Transaction Object
@@ -99,7 +114,8 @@ All extracted transactions are returned as JSON objects with the following struc
 ```json
 {
   "source": "filename.pdf",
-  "doc_number": "12345678",
+  "order_number": "999888777/1",
+  "transaction_number": "8887776665",
   "document_type": "TRADE",
   "isin": "DE0005140008",
   "wkn": "514000",
@@ -119,14 +135,16 @@ All extracted transactions are returned as JSON objects with the following struc
   "final_currency": "EUR",
   "custody_type": "DEPOT",
   "depositary": "flatex",
-  "country": "DE"
+  "country": "DE",
+  "execution_venue": "XETRA"
 }
 ```
 
 ### Common Fields (All Transactions)
 
 - `source` — Source filename (only if `--include-source` flag is used)
-- `doc_number` — Document reference number
+- `order_number` — Order number (Auftragsnummer), if present
+- `transaction_number` — Tax-report transaction number (Transaktion-Nr.), if present
 - `document_type` — Type of document (TRADE, DIVIDEND, INTEREST, THESAURIERUNG)
 - `isin` — ISIN of the security
 - `wkn` — German securities identification number (if available)
@@ -150,6 +168,7 @@ All extracted transactions are returned as JSON objects with the following struc
 - `custody_type` — Type of custody (DEPOT, etc.)
 - `depositary` — Depositary institution name
 - `country` — Country code of security
+- `execution_venue` — Execution venue/type (Ausf.platz/-art), e.g. XETRA
 
 ### Dividend-Specific Fields
 
@@ -181,11 +200,12 @@ All extracted transactions are returned as JSON objects with the following struc
 {
   "metadata": {
     "depot_number": "1234567890",
-    "depot_holder": "Max Mustermann"
+    "depot_holder": "Max Mustermann",
+    "account_number": "9876543210"
   },
   "transactions": [
     {
-      "doc_number": "12345678",
+      "order_number": "999888777/1",
       "document_type": "TRADE",
       "isin": "DE0005140008",
       "wkn": "514000",

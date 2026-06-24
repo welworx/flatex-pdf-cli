@@ -1,8 +1,12 @@
 # Binaries
 flatex-pdf-cli
+flatex-pdf-cli-test
 *.o
 *.a
 *.so
+
+# macOS
+.DS_Store
 
 # Output files
 *.json
@@ -20,3 +24,5 @@ flatex-pdf-cli
 
 # Go
 /vendor/
+
+sensitive_test_docs/
