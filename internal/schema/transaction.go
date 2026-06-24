@@ -1,25 +1,20 @@
 package schema
 
-import "time"
-
 // DocumentMetadata holds metadata about the parsed document.
 type DocumentMetadata struct {
-	Source       string    `json:"source,omitempty"`
-	DocNumber    string    `json:"doc_number"`
-	DocumentType string    `json:"document_type"`
-	Date         time.Time `json:"date"`
-	ParsedAt     time.Time `json:"parsed_at,omitempty"`
+	DepotNumber string `json:"depot_number"`
+	DepotHolder string `json:"depot_holder"`
 }
 
 // Transaction represents a single transaction (trade, dividend, interest, or thesaurierung).
 type Transaction struct {
 	// Common fields
-	Source       string    `json:"source,omitempty"`
-	DocNumber    string    `json:"doc_number"`
-	DocumentType string    `json:"document_type"`
-	ISIN         string    `json:"isin"`
-	WKN          string    `json:"wkn,omitempty"`
-	Date         time.Time `json:"date"`
+	Source       string `json:"source,omitempty"`
+	DocNumber    string `json:"doc_number"`
+	DocumentType string `json:"document_type"`
+	ISIN         string `json:"isin"`
+	WKN          string `json:"wkn,omitempty"`
+	Date         string `json:"date"`
 
 	// TRADE fields
 	Type            string  `json:"type,omitempty"`
@@ -40,23 +35,23 @@ type Transaction struct {
 	Country         string  `json:"country,omitempty"`
 
 	// DIVIDEND fields
-	DistributionPerShare   float64   `json:"distribution_per_share,omitempty"`
-	DistributionCurrency   string    `json:"distribution_currency,omitempty"`
-	GrossAmount            float64   `json:"gross_amount,omitempty"`
-	GrossCurrency          string    `json:"gross_currency,omitempty"`
-	WithholdingTaxCurrency string    `json:"withholding_tax_currency,omitempty"`
-	NetAmount              float64   `json:"net_amount,omitempty"`
-	NetCurrency            string    `json:"net_currency,omitempty"`
-	ExDate                 time.Time `json:"ex_date,omitempty"`
-	ValueDate              time.Time `json:"value_date,omitempty"`
+	DistributionPerShare   float64 `json:"distribution_per_share,omitempty"`
+	DistributionCurrency   string  `json:"distribution_currency,omitempty"`
+	GrossAmount            float64 `json:"gross_amount,omitempty"`
+	GrossCurrency          string  `json:"gross_currency,omitempty"`
+	WithholdingTaxCurrency string  `json:"withholding_tax_currency,omitempty"`
+	NetAmount              float64 `json:"net_amount,omitempty"`
+	NetCurrency            string  `json:"net_currency,omitempty"`
+	ExDate                 string  `json:"ex_date,omitempty"`
+	ValueDate              string  `json:"value_date,omitempty"`
 
 	// INTEREST fields
-	InterestRate float64   `json:"interest_rate,omitempty"`
-	PeriodFrom   time.Time `json:"period_from,omitempty"`
-	PeriodTo     time.Time `json:"period_to,omitempty"`
+	InterestRate float64 `json:"interest_rate,omitempty"`
+	PeriodFrom   string  `json:"period_from,omitempty"`
+	PeriodTo     string  `json:"period_to,omitempty"`
 
 	// THESAURIERUNG fields
-	ReinvestmentPerShare float64   `json:"reinvestment_per_share,omitempty"`
-	ReinvestmentCurrency string    `json:"reinvestment_currency,omitempty"`
-	AccrualDate          time.Time `json:"accrual_date,omitempty"`
+	ReinvestmentPerShare float64 `json:"reinvestment_per_share,omitempty"`
+	ReinvestmentCurrency string  `json:"reinvestment_currency,omitempty"`
+	AccrualDate          string  `json:"accrual_date,omitempty"`
 }

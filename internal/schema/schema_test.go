@@ -3,19 +3,16 @@ package schema
 import (
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 func TestTradeTransactionMarshal(t *testing.T) {
-	date := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
-
 	tx := Transaction{
 		Source:          "flatex",
 		DocNumber:       "TRD-2024-001",
 		DocumentType:    "TRADE",
 		ISIN:            "IE000YU9K6K2",
 		WKN:             "A2XXXX",
-		Date:            date,
+		Date:            "2024-06-15",
 		Type:            "BUY",
 		Quantity:        1.058537,
 		Price:           47.235,
@@ -71,16 +68,12 @@ func TestTradeTransactionMarshal(t *testing.T) {
 }
 
 func TestDividendTransactionMarshal(t *testing.T) {
-	exDate := time.Date(2024, 6, 10, 0, 0, 0, 0, time.UTC)
-	valueDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
-	docDate := time.Date(2024, 6, 20, 0, 0, 0, 0, time.UTC)
-
 	tx := Transaction{
 		Source:                 "flatex",
 		DocNumber:              "DIV-2024-001",
 		DocumentType:           "DIVIDEND",
 		ISIN:                   "IE00B3RBWM25",
-		Date:                   docDate,
+		Date:                   "2024-06-20",
 		Quantity:               78.70,
 		DistributionPerShare:   0.5459180,
 		DistributionCurrency:   "USD",
@@ -90,8 +83,8 @@ func TestDividendTransactionMarshal(t *testing.T) {
 		WithholdingTaxCurrency: "USD",
 		NetAmount:              36.54,
 		NetCurrency:            "USD",
-		ExDate:                 exDate,
-		ValueDate:              valueDate,
+		ExDate:                 "2024-06-10",
+		ValueDate:              "2024-06-15",
 	}
 
 	// Marshal to JSON
@@ -132,19 +125,16 @@ func TestDividendTransactionMarshal(t *testing.T) {
 }
 
 func TestThesaurierungTransactionMarshal(t *testing.T) {
-	accrualDate := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
-	docDate := time.Date(2024, 6, 20, 0, 0, 0, 0, time.UTC)
-
 	tx := Transaction{
 		Source:               "flatex",
 		DocNumber:            "THES-2024-001",
 		DocumentType:         "THESAURIERUNG",
 		ISIN:                 "IE00B5L8K969",
-		Date:                 docDate,
+		Date:                 "2024-06-20",
 		Quantity:             4.75,
 		ReinvestmentPerShare: 0.7234,
 		ReinvestmentCurrency: "EUR",
-		AccrualDate:          accrualDate,
+		AccrualDate:          "2024-06-15",
 	}
 
 	// Marshal to JSON
