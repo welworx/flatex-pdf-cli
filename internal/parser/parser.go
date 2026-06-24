@@ -112,8 +112,124 @@ func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 
 // ParseDividend parses a DIVIDEND document.
 func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
-	// Stub implementation
-	return nil, fmt.Errorf("ParseDividend not implemented yet")
+	text := doc.Text
+
+	// Extract ISIN
+	isin := extractISIN(text)
+	if isin == "" {
+		return nil, fmt.Errorf("ISIN not found in document")
+	}
+
+	// Extract value date (Valuta field)
+	valueDateStr := extractString(text, `Valuta\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	if valueDateStr == "" {
+		return nil, fmt.Errorf("value date not found in document")
+	}
+	// Convert DD.MM.YYYY to YYYY-MM-DD
+	parts := strings.Split(valueDateStr, ".")
+	var valueDate string
+	if len(parts) == 3 {
+		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+	}
+
+	// Extract ex-date (Extag field - may contain different date)
+	exDateStr := extractString(text, `Extag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	var exDate string
+	if exDateStr != "" {
+		// Convert DD.MM.YYYY to YYYY-MM-DD
+		parts := strings.Split(exDateStr, ".")
+		if len(parts) == 3 {
+			exDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+	}
+
+	// Extract quantity (shares held)
+	quantity, err := extractFloat(text, `St\.\s*:\s*([\d\s.,]+)\s*Brutto`)
+	if err != nil {
+		return nil, fmt.Errorf("quantity not found: %w", err)
+	}
+
+	// Extract distribution per share
+	distributionPerShare, err := extractFloat(text, `pro Stück\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("distribution per share not found: %w", err)
+	}
+
+	// Extract distribution currency
+	distributionCurrency := extractString(text, `pro Stück\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if distributionCurrency == "" {
+		distributionCurrency = "EUR"
+	}
+
+	// Extract gross amount
+	grossAmount, err := extractFloat(text, `Bruttoausschüttung\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("gross amount not found: %w", err)
+	}
+
+	// Extract gross currency
+	grossCurrency := extractString(text, `Bruttoausschüttung\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if grossCurrency == "" {
+		grossCurrency = "EUR"
+	}
+
+	// Extract withholding tax
+	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("withholding tax not found: %w", err)
+	}
+
+	// Extract withholding tax currency
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if withholdingTaxCurrency == "" {
+		withholdingTaxCurrency = "EUR"
+	}
+
+	// Extract net amount (Endbetrag)
+	netAmount, err := extractFloat(text, `Endbetrag\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("net amount not found: %w", err)
+	}
+
+	// Extract net currency
+	netCurrency := extractString(text, `Endbetrag\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if netCurrency == "" {
+		netCurrency = "EUR"
+	}
+
+	// Extract exchange rate (optional, default to 1.0)
+	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`)
+	if err != nil {
+		exchangeRate = 1.0
+	}
+
+	// Extract WKN from ISIN/WKN pattern
+	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
+	if wkn == "" {
+		wkn = extractWKN(text)
+	}
+
+	transaction := &schema.Transaction{
+		Source:                 doc.Filename,
+		DocumentType:           "DIVIDEND",
+		ISIN:                   isin,
+		WKN:                    wkn,
+		Date:                   valueDate,
+		Quantity:               quantity,
+		DistributionPerShare:   distributionPerShare,
+		DistributionCurrency:   distributionCurrency,
+		GrossAmount:            grossAmount,
+		GrossCurrency:          grossCurrency,
+		WithholdingTax:         withholdingTax,
+		WithholdingTaxCurrency: withholdingTaxCurrency,
+		NetAmount:              netAmount,
+		NetCurrency:            netCurrency,
+		ExchangeRate:           exchangeRate,
+		ExDate:                 exDate,
+		ValueDate:              valueDate,
+	}
+
+	return transaction, nil
 }
 
 // ParseInterest parses an INTEREST document.
