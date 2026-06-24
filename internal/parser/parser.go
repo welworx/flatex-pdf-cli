@@ -28,8 +28,86 @@ func Parse(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 
 // ParseTrade parses a TRADE document.
 func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
-	// Stub implementation
-	return nil, fmt.Errorf("ParseTrade not implemented yet")
+	text := doc.Text
+
+	// Extract ISIN and WKN
+	isin := extractISIN(text)
+	if isin == "" {
+		return nil, fmt.Errorf("ISIN not found in document")
+	}
+
+	// Extract date
+	date := extractDate(text)
+	if date == "" {
+		return nil, fmt.Errorf("date not found in document")
+	}
+
+	// Determine trade type: "Kauf" → "BUY", "Verkauf" → "SELL"
+	tradeType := "BUY"
+	if strings.Contains(strings.ToLower(text), "verkauf") {
+		tradeType = "SELL"
+	}
+
+	// Extract quantity (executed shares)
+	quantity, err := extractFloat(text, `Ausgeführt\s*:\s*([\d\s.,]+)\s*St\.`)
+	if err != nil {
+		return nil, fmt.Errorf("quantity not found: %w", err)
+	}
+
+	// Extract price per share
+	price, err := extractFloat(text, `Kurs\s*:\s*([\d\s.,]+)\s*EUR`)
+	if err != nil {
+		return nil, fmt.Errorf("price not found: %w", err)
+	}
+
+	// Extract currency (extract after "Kurswert")
+	currency := extractString(text, `Kurswert\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if currency == "" {
+		currency = "EUR" // Default to EUR if not found
+	}
+
+	// Extract gross value (Kurswert)
+	grossValue, err := extractFloat(text, `Kurswert\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("gross value not found: %w", err)
+	}
+
+	// Extract provision (fees)
+	provision, err := extractFloat(text, `Provision\s*:\s*([\d\s.,]+)\s*EUR`)
+	if err != nil {
+		// Default to 0 if not found (some trades may have no provision)
+		provision = 0
+	}
+
+	// Extract exchange rate (optional, default to 1.0)
+	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
+	if err != nil {
+		exchangeRate = 1.0
+	}
+
+	// Extract WKN from ISIN/WKN pattern (e.g., "IE000YU9K6K2/A3DP9J")
+	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
+	if wkn == "" {
+		// Fallback to general WKN extraction
+		wkn = extractWKN(text)
+	}
+
+	transaction := &schema.Transaction{
+		Source:        doc.Filename,
+		DocumentType:  "TRADE",
+		ISIN:          isin,
+		WKN:           wkn,
+		Date:          date,
+		Type:          tradeType,
+		Quantity:      quantity,
+		Price:         price,
+		PriceCurrency: currency,
+		GrossValue:    grossValue,
+		Provision:     provision,
+		ExchangeRate:  exchangeRate,
+	}
+
+	return transaction, nil
 }
 
 // ParseDividend parses a DIVIDEND document.
