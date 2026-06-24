@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
@@ -49,8 +48,8 @@ func TestParseThesaurierungRouting(t *testing.T) {
 	if err == nil {
 		t.Errorf("Parse should return error for stub implementation, got nil")
 	}
-	if !strings.Contains(err.Error(), "ParseThesaurierung") {
-		t.Errorf("expected ParseThesaurierung error, got: %v", err)
+	if err.Error() != "ParseThesaurierung not implemented yet" {
+		t.Errorf("expected 'ParseThesaurierung not implemented yet' error, got: %v", err)
 	}
 }
 
