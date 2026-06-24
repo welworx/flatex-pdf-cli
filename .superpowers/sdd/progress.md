@@ -1,28 +1,41 @@
-# flatex-pdf-cli Implementation Progress
+# Implementation Progress
 
-## Tasks
-- [ ] Task 1: Project Setup & Dependencies
-- [ ] Task 2: Define Transaction Schema
-- [ ] Task 3: Implement Output Wrapper Schema
-- [ ] Task 4: Implement PDF Extractor
-- [ ] Task 5: Implement Parser Router
-- [ ] Task 6: Implement Trade Parser
-- [ ] Task 7: Implement Dividend Parser
-- [ ] Task 8: Implement Interest Parser
-- [ ] Task 9: Implement Thesaurierung Parser
-- [ ] Task 10: Implement CLI Entry Point
-- [ ] Task 11: Add Test Data and Integration Tests
-- [ ] Task 12: GitHub Actions CI/CD Pipeline
-- [ ] Task 13: Pre-Commit Hooks Setup
-- [ ] Task 14: Documentation & Final Verification
+## Task 1: Add gxpdf dependency, remove pdfcpu
+✅ **COMPLETE** (commits 8806cf0..2f146dc)
+- pdfcpu removed, gxpdf added (v0.8.2)
+- extractTextFromPDF() implemented using gxpdf
+- Note: Signature uses `filePath string` (pragmatic choice, Task 2 adapts)
+- Review: APPROVED
 
-## Completed
-(none yet)
+## Task 2: Implement tests and validate text extraction  
+✅ **COMPLETE** (commits 2f146dc..2e7c0c2)
+- Added TestTextExtractionFromRealPDF
+- Fixed gxpdf page indexing (0-based → 1-based)
+- All tests pass, no regressions
+- Review: APPROVED
 
-✅ Task 1: Project Setup & Dependencies (commits ca53420, 98629ae, review clean)
-✅ Task 2: Define Transaction Schema (commits 6dc513c, f8b964e, review clean)
-✅ Task 3: Output Wrapper Schema (commit 6000fa0, review clean)
-✅ Task 4: PDF Extractor (commit fdcebd5, tests 3/3 passing)
-✅ Task 5: Parser Router (commit 184753a, tests 3/3 passing)
-✅ Task 6: Trade Parser (commit 1735f21, tests 4/4 passing)
-✅ Task 7: Dividend Parser (commit 690c5f3, tests 5/5 passing)
+## Task 3: Extract text and analyze keywords
+✅ **COMPLETE** (commits 2e7c0c2..2e7c0c2, no new commits)
+- Extracted text from all 4 PDFs
+- Analyzed keyword patterns for TRADE vs DIVIDEND
+- Identified "Wertpapierabrechnung" + "Kauf" for TRADE
+- Identified "Ertragsmitteilung" + "Ausschüttung" for DIVIDEND
+- Saved detailed analysis to keyword_analysis.txt
+- Review: APPROVED
+
+## Task 4: Redact PII using Presidio
+✅ **COMPLETE** (commits 2e7c0c2..2e7c0c2, no new commits)
+- Used Presidio for automated PII detection and redaction
+- Created 4 redacted fixture files in scratchpad
+- Detected and redacted 317 total PII entities
+- Files ready for user review
+- Review: APPROVED
+
+## Task 4: Create redacted PDFs with synthetic PII
+✅ **COMPLETE** (commits 2e7c0c2..2e7c0c2, no new commits)
+- Used Presidio to identify PII
+- Replaced with synthetic German names, shifted dates, account numbers
+- Created 4 redacted PDFs in scratchpad
+- All PDFs verified as valid and extractable
+- Ready for Task 5: user approval
+- Review: APPROVED

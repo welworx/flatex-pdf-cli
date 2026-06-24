@@ -2,19 +2,21 @@ package schema
 
 // DocumentMetadata holds metadata about the parsed document.
 type DocumentMetadata struct {
-	DepotNumber string `json:"depot_number"`
-	DepotHolder string `json:"depot_holder"`
+	DepotNumber   string `json:"depot_number"`
+	DepotHolder   string `json:"depot_holder"`
+	AccountNumber string `json:"account_number,omitempty"`
 }
 
 // Transaction represents a single transaction (trade, dividend, interest, or thesaurierung).
 type Transaction struct {
 	// Common fields
-	Source       string `json:"source,omitempty"`
-	DocNumber    string `json:"doc_number"`
-	DocumentType string `json:"document_type"`
-	ISIN         string `json:"isin"`
-	WKN          string `json:"wkn,omitempty"`
-	Date         string `json:"date"`
+	Source            string `json:"source,omitempty"`
+	OrderNumber       string `json:"order_number,omitempty"`       // Auftragsnummer
+	TransactionNumber string `json:"transaction_number,omitempty"` // Transaktion-Nr.
+	DocumentType      string `json:"document_type"`
+	ISIN              string `json:"isin"`
+	WKN               string `json:"wkn,omitempty"`
+	Date              string `json:"date"`
 
 	// TRADE fields
 	Type            string  `json:"type,omitempty"`
@@ -33,6 +35,7 @@ type Transaction struct {
 	CustodyType     string  `json:"custody_type,omitempty"`
 	Depositary      string  `json:"depositary,omitempty"`
 	Country         string  `json:"country,omitempty"`
+	ExecutionVenue  string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
 	// DIVIDEND fields
 	DistributionPerShare   float64 `json:"distribution_per_share,omitempty"`

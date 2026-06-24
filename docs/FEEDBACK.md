@@ -16,7 +16,7 @@ error parsing /path/to/document.pdf: unknown document type: UNKNOWN
 
 **Example failure:**
 ```
-File: 20250916_KaufFondsZertifikate_55000000999_517614092.pdf
+File: 20250916_KaufFondsZertifikate_55000000999_100000001.pdf
 Expected type: TRADE
 Detected type: UNKNOWN
 ```

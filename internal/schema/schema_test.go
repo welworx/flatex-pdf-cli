@@ -8,7 +8,7 @@ import (
 func TestTradeTransactionMarshal(t *testing.T) {
 	tx := Transaction{
 		Source:          "flatex",
-		DocNumber:       "TRD-2024-001",
+		OrderNumber:     "999888777/1",
 		DocumentType:    "TRADE",
 		ISIN:            "IE000YU9K6K2",
 		WKN:             "A2XXXX",
@@ -70,7 +70,7 @@ func TestTradeTransactionMarshal(t *testing.T) {
 func TestDividendTransactionMarshal(t *testing.T) {
 	tx := Transaction{
 		Source:                 "flatex",
-		DocNumber:              "DIV-2024-001",
+		OrderNumber:            "999888777/1",
 		DocumentType:           "DIVIDEND",
 		ISIN:                   "IE00B3RBWM25",
 		Date:                   "2024-06-20",
@@ -127,7 +127,7 @@ func TestDividendTransactionMarshal(t *testing.T) {
 func TestThesaurierungTransactionMarshal(t *testing.T) {
 	tx := Transaction{
 		Source:               "flatex",
-		DocNumber:            "THES-2024-001",
+		OrderNumber:          "999888777/1",
 		DocumentType:         "THESAURIERUNG",
 		ISIN:                 "IE00B5L8K969",
 		Date:                 "2024-06-20",
@@ -177,7 +177,7 @@ func TestThesaurierungTransactionMarshal(t *testing.T) {
 func TestOutputWithMetadata(t *testing.T) {
 	tx := Transaction{
 		Source:        "flatex",
-		DocNumber:     "TRD-2024-001",
+		OrderNumber:   "999888777/1",
 		DocumentType:  "TRADE",
 		ISIN:          "IE000YU9K6K2",
 		Date:          "2024-06-15",
@@ -243,7 +243,7 @@ func TestOutputWithMetadata(t *testing.T) {
 func TestOutputTransactionsOnly(t *testing.T) {
 	tx := Transaction{
 		Source:       "flatex",
-		DocNumber:    "TRD-2024-001",
+		OrderNumber:  "999888777/1",
 		DocumentType: "TRADE",
 		ISIN:         "IE000YU9K6K2",
 		Date:         "2024-06-15",
