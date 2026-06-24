@@ -66,10 +66,11 @@ func main() {
 		transactions = append(transactions, txn)
 
 		// Capture metadata from first file
-		if metadata == nil && (doc.DepotNumber != "" || doc.DepotHolder != "") {
+		if metadata == nil && (doc.DepotNumber != "" || doc.DepotHolder != "" || doc.AccountNumber != "") {
 			metadata = &schema.DocumentMetadata{
-				DepotNumber: doc.DepotNumber,
-				DepotHolder: doc.DepotHolder,
+				DepotNumber:   doc.DepotNumber,
+				DepotHolder:   doc.DepotHolder,
+				AccountNumber: doc.AccountNumber,
 			}
 		}
 	}

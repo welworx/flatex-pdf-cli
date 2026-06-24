@@ -92,19 +92,27 @@ func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		wkn = extractWKN(text)
 	}
 
+	// Extract identifiers (all optional)
+	orderNumber := extractString(text, `Auftragsnummer\s*:?\s*(\S+)`)
+	transactionNumber := extractString(text, `Transaktion-Nr\.\s*:?\s*(\d+)`)
+	executionVenue := extractString(text, `Ausf\.platz/-art\s*([^\n]+)`)
+
 	transaction := &schema.Transaction{
-		Source:        doc.Filename,
-		DocumentType:  "TRADE",
-		ISIN:          isin,
-		WKN:           wkn,
-		Date:          date,
-		Type:          tradeType,
-		Quantity:      quantity,
-		Price:         price,
-		PriceCurrency: currency,
-		GrossValue:    grossValue,
-		Provision:     provision,
-		ExchangeRate:  exchangeRate,
+		Source:            doc.Filename,
+		OrderNumber:       orderNumber,
+		TransactionNumber: transactionNumber,
+		DocumentType:      "TRADE",
+		ISIN:              isin,
+		WKN:               wkn,
+		Date:              date,
+		Type:              tradeType,
+		Quantity:          quantity,
+		Price:             price,
+		PriceCurrency:     currency,
+		GrossValue:        grossValue,
+		Provision:         provision,
+		ExchangeRate:      exchangeRate,
+		ExecutionVenue:    executionVenue,
 	}
 
 	return transaction, nil
@@ -471,17 +479,46 @@ func extractFloat(text, pattern string) (float64, error) {
 		return 0, fmt.Errorf("pattern not found: %s", pattern)
 	}
 
-	// Replace European decimal separator (comma) with dot
-	value := strings.ReplaceAll(matches[1], ",", ".")
-	// Remove any thousand separators (spaces or dots that precede comma)
-	value = strings.ReplaceAll(value, " ", "")
-
-	f, err := strconv.ParseFloat(value, 64)
+	f, err := strconv.ParseFloat(normalizeDecimal(matches[1]), 64)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse float from '%s': %w", matches[1], err)
 	}
 
 	return f, nil
+}
+
+// normalizeDecimal converts a German (1.234,56) or English (1,234.56) formatted
+// number into a Go-parseable decimal. The rightmost of '.' or ',' is treated as
+// the decimal separator; every other '.'/',' is a thousands separator and dropped.
+// ponytail: a lone "1.234" is read as English 1.234, not German 1234 — that case
+// is genuinely ambiguous without the document's locale; switch to locale-driven
+// parsing if a real flatex field ever depends on it.
+func normalizeDecimal(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, " ", "")
+
+	lastDot := strings.LastIndex(s, ".")
+	lastComma := strings.LastIndex(s, ",")
+
+	var dec int // index of the decimal separator, -1 if none
+	if lastDot > lastComma {
+		dec = lastDot
+	} else {
+		dec = lastComma
+	}
+
+	var b strings.Builder
+	for i, r := range s {
+		switch {
+		case r == '.' || r == ',':
+			if i == dec {
+				b.WriteByte('.')
+			} // else: thousands separator, drop it
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // extractString extracts a string from text using a regex pattern and trims whitespace.
