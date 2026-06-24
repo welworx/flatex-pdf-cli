@@ -38,18 +38,16 @@ func TestParseDividendRouting(t *testing.T) {
 
 // TestParseThesaurierungRouting tests that the Parse function routes THESAURIERUNG documents correctly.
 func TestParseThesaurierungRouting(t *testing.T) {
+	text := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
 	doc := &extractor.ExtractedDocument{
 		Filename:     "thesaurierung.pdf",
-		Text:         "Ertragsmitteilung",
+		Text:         text,
 		DocumentType: "THESAURIERUNG",
 	}
 
 	_, err := Parse(doc)
-	if err == nil {
-		t.Errorf("Parse should return error for stub implementation, got nil")
-	}
-	if err.Error() != "ParseThesaurierung not implemented yet" {
-		t.Errorf("expected 'ParseThesaurierung not implemented yet' error, got: %v", err)
+	if err != nil {
+		t.Errorf("Parse should successfully route THESAURIERUNG document, got error: %v", err)
 	}
 }
 
@@ -153,5 +151,129 @@ func TestParseDividend(t *testing.T) {
 	}
 	if tx.ValueDate != "2026-01-01" {
 		t.Errorf("expected ValueDate=2026-01-01, got %s", tx.ValueDate)
+	}
+}
+
+// TestParseInterestRouting tests that the Parse function routes INTEREST documents correctly.
+func TestParseInterestRouting(t *testing.T) {
+	text := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
+	doc := &extractor.ExtractedDocument{
+		Filename:     "interest.pdf",
+		Text:         text,
+		DocumentType: "INTEREST",
+	}
+
+	_, err := Parse(doc)
+	if err != nil {
+		t.Errorf("Parse should successfully route INTEREST document, got error: %v", err)
+	}
+}
+
+// TestParseInterest tests parsing an INTEREST statement.
+func TestParseInterest(t *testing.T) {
+	text := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
+	doc := &extractor.ExtractedDocument{
+		Filename:     "interest.pdf",
+		Text:         text,
+		DocumentType: "INTEREST",
+	}
+
+	tx, err := ParseInterest(doc)
+	if err != nil {
+		t.Fatalf("ParseInterest failed: %v", err)
+	}
+
+	// Verify core fields
+	if tx.DocumentType != "INTEREST" {
+		t.Errorf("expected DocumentType=INTEREST, got %s", tx.DocumentType)
+	}
+	if tx.ISIN != "IE00B3RBWM25" {
+		t.Errorf("expected ISIN=IE00B3RBWM25, got %s", tx.ISIN)
+	}
+	if tx.GrossAmount != 25.50 {
+		t.Errorf("expected GrossAmount=25.50, got %f", tx.GrossAmount)
+	}
+	if tx.GrossCurrency != "EUR" {
+		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
+	}
+	if tx.WithholdingTax != 3.40 {
+		t.Errorf("expected WithholdingTax=3.40, got %f", tx.WithholdingTax)
+	}
+	if tx.WithholdingTaxCurrency != "EUR" {
+		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
+	}
+	if tx.NetAmount != 22.10 {
+		t.Errorf("expected NetAmount=22.10, got %f", tx.NetAmount)
+	}
+	if tx.NetCurrency != "EUR" {
+		t.Errorf("expected NetCurrency=EUR, got %s", tx.NetCurrency)
+	}
+	if tx.InterestRate != 2.5 {
+		t.Errorf("expected InterestRate=2.5, got %f", tx.InterestRate)
+	}
+	if tx.PeriodFrom != "2026-01-01" {
+		t.Errorf("expected PeriodFrom=2026-01-01, got %s", tx.PeriodFrom)
+	}
+	if tx.PeriodTo != "2026-03-31" {
+		t.Errorf("expected PeriodTo=2026-03-31, got %s", tx.PeriodTo)
+	}
+	if tx.Date != "2026-04-15" {
+		t.Errorf("expected Date=2026-04-15, got %s", tx.Date)
+	}
+}
+
+// TestParseThesaurierung tests parsing a THESAURIERUNG (reinvestment) statement.
+func TestParseThesaurierung(t *testing.T) {
+	text := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
+	doc := &extractor.ExtractedDocument{
+		Filename:     "thesaurierung.pdf",
+		Text:         text,
+		DocumentType: "THESAURIERUNG",
+	}
+
+	tx, err := ParseThesaurierung(doc)
+	if err != nil {
+		t.Fatalf("ParseThesaurierung failed: %v", err)
+	}
+
+	// Verify core fields
+	if tx.DocumentType != "THESAURIERUNG" {
+		t.Errorf("expected DocumentType=THESAURIERUNG, got %s", tx.DocumentType)
+	}
+	if tx.ISIN != "IE00B5L8K969" {
+		t.Errorf("expected ISIN=IE00B5L8K969, got %s", tx.ISIN)
+	}
+	if tx.WKN != "A2H514" {
+		t.Errorf("expected WKN=A2H514, got %s", tx.WKN)
+	}
+	if tx.Quantity != 4.75 {
+		t.Errorf("expected Quantity=4.75, got %f", tx.Quantity)
+	}
+	if tx.ReinvestmentPerShare != -0.572 {
+		t.Errorf("expected ReinvestmentPerShare=-0.572, got %f", tx.ReinvestmentPerShare)
+	}
+	if tx.ReinvestmentCurrency != "USD" {
+		t.Errorf("expected ReinvestmentCurrency=USD, got %s", tx.ReinvestmentCurrency)
+	}
+	if tx.GrossAmount != -2.72 {
+		t.Errorf("expected GrossAmount=-2.72, got %f", tx.GrossAmount)
+	}
+	if tx.GrossCurrency != "USD" {
+		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
+	}
+	if tx.WithholdingTax != 0.0 {
+		t.Errorf("expected WithholdingTax=0.0, got %f", tx.WithholdingTax)
+	}
+	if tx.WithholdingTaxCurrency != "EUR" {
+		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
+	}
+	if tx.ExchangeRate != 1.08 {
+		t.Errorf("expected ExchangeRate=1.08, got %f", tx.ExchangeRate)
+	}
+	if tx.ExDate != "2026-06-15" {
+		t.Errorf("expected ExDate=2026-06-15, got %s", tx.ExDate)
+	}
+	if tx.ValueDate != "2026-06-30" {
+		t.Errorf("expected ValueDate=2026-06-30, got %s", tx.ValueDate)
 	}
 }
