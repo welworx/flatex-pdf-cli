@@ -173,3 +173,103 @@ func TestThesaurierungTransactionMarshal(t *testing.T) {
 		t.Errorf("DocumentType mismatch: got %q, want %q", rtx.DocumentType, "THESAURIERUNG")
 	}
 }
+
+func TestOutputWithMetadata(t *testing.T) {
+	tx := Transaction{
+		Source:        "flatex",
+		DocNumber:     "TRD-2024-001",
+		DocumentType:  "TRADE",
+		ISIN:          "IE000YU9K6K2",
+		Date:          "2024-06-15",
+		Type:          "BUY",
+		Quantity:      1.0,
+		Price:         50.0,
+		PriceCurrency: "EUR",
+	}
+
+	output := Output{
+		Metadata: &DocumentMetadata{
+			DepotNumber: "31022213999",
+			DepotHolder: "Max Mustermann",
+		},
+		Transactions: []*Transaction{&tx},
+	}
+
+	// Marshal to JSON
+	data, err := json.Marshal(output)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Verify JSON contains expected strings
+	if jsonStr == "" {
+		t.Error("JSON serialization produced empty string")
+	}
+
+	// Check for specific content
+	if !contains(jsonStr, "31022213999") {
+		t.Errorf("JSON missing depot_number: %s", jsonStr)
+	}
+	if !contains(jsonStr, "transactions") {
+		t.Errorf("JSON missing transactions field: %s", jsonStr)
+	}
+	if !contains(jsonStr, "metadata") {
+		t.Errorf("JSON missing metadata field: %s", jsonStr)
+	}
+
+	// Unmarshal to verify roundtrip
+	var rout Output
+	if err := json.Unmarshal(data, &rout); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	// Verify structure
+	if rout.Metadata == nil {
+		t.Error("Metadata should not be nil")
+	}
+	if rout.Metadata != nil && rout.Metadata.DepotNumber != "31022213999" {
+		t.Errorf("DepotNumber mismatch: got %q, want %q", rout.Metadata.DepotNumber, "31022213999")
+	}
+	if rout.Metadata != nil && rout.Metadata.DepotHolder != "Max Mustermann" {
+		t.Errorf("DepotHolder mismatch: got %q, want %q", rout.Metadata.DepotHolder, "Max Mustermann")
+	}
+	if len(rout.Transactions) != 1 {
+		t.Errorf("Transactions length mismatch: got %d, want 1", len(rout.Transactions))
+	}
+}
+
+func TestOutputTransactionsOnly(t *testing.T) {
+	tx := Transaction{
+		Source:       "flatex",
+		DocNumber:    "TRD-2024-001",
+		DocumentType: "TRADE",
+		ISIN:         "IE000YU9K6K2",
+		Date:         "2024-06-15",
+	}
+
+	// Marshal transactions slice directly
+	txs := []*Transaction{&tx}
+	data, err := json.Marshal(txs)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+
+	// Verify it's an array (starts with "[")
+	if len(jsonStr) == 0 || jsonStr[0] != '[' {
+		t.Errorf("JSON should be an array starting with '[', got: %s", jsonStr)
+	}
+}
+
+// contains is a helper function to check if a string is present in another string
+func contains(haystack, needle string) bool {
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
