@@ -24,3 +24,4 @@
 ✅ Task 3: Output Wrapper Schema (commit 6000fa0, review clean)
 ✅ Task 4: PDF Extractor (commit fdcebd5, tests 3/3 passing)
 ✅ Task 5: Parser Router (commit 184753a, tests 3/3 passing)
+✅ Task 6: Trade Parser (commit 1735f21, tests 4/4 passing)
