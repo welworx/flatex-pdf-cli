@@ -1,0 +1,18 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - ineffassign
+    - unused
+    - deadcode
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck

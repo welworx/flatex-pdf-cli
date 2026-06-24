@@ -1,0 +1,22 @@
+# Binaries
+flatex-pdf-cli
+*.o
+*.a
+*.so
+
+# Output files
+*.json
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+*.test
+*.out
+
+# Go
+/vendor/
