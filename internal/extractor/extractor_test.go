@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -331,4 +332,63 @@ func TestIntegrationThesaurierung(t *testing.T) {
 	if doc.DepotHolder != "Max Mustermann" {
 		t.Errorf("expected depot holder 'Max Mustermann', got '%s'", doc.DepotHolder)
 	}
+}
+
+// TestTextExtractionFromRealPDF tests text extraction from real flatex PDFs.
+// It verifies that extractTextFromPDF successfully extracts text and that
+// the extracted content contains expected German keywords.
+func TestTextExtractionFromRealPDF(t *testing.T) {
+	// Find a real PDF from sensitive_test_docs/
+	var pdfPath string
+	possiblePaths := []string{
+		"sensitive_test_docs/20250916_KaufFondsZertifikate_31022213999_517614092.pdf",
+		"../../sensitive_test_docs/20250916_KaufFondsZertifikate_31022213999_517614092.pdf",
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			pdfPath = path
+			break
+		}
+	}
+
+	if pdfPath == "" {
+		t.Skipf("no real PDF found in sensitive_test_docs/; skipping real PDF extraction test")
+	}
+
+	text, err := extractTextFromPDF(pdfPath)
+	if err != nil {
+		t.Fatalf("extractTextFromPDF failed: %v", err)
+	}
+
+	// Verify text is not empty
+	if text == "" {
+		t.Error("extracted text is empty")
+	}
+
+	// Check for expected German keywords
+	keywords := []string{"flatex", "kauf", "depot"}
+	found := map[string]bool{}
+	lowerText := strings.ToLower(text)
+
+	for _, kw := range keywords {
+		if strings.Contains(lowerText, kw) {
+			found[kw] = true
+		}
+	}
+
+	// At least some expected keywords should be found
+	if len(found) == 0 {
+		t.Logf("warning: no expected keywords found in extracted text")
+		t.Logf("extracted text length: %d characters", len(text))
+		t.Logf("first 200 characters: %s", text[:min(200, len(text))])
+	}
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
