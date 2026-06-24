@@ -2,12 +2,11 @@ package extractor
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/coregx/gxpdf"
 )
 
 // ExtractedDocument contains extracted text and metadata from a PDF file.
@@ -21,13 +20,7 @@ type ExtractedDocument struct {
 
 // ExtractPDF extracts text and metadata from a PDF file.
 func ExtractPDF(filePath string) (*ExtractedDocument, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open PDF: %w", err)
-	}
-	defer file.Close()
-
-	text, err := extractTextFromPDF(file)
+	text, err := extractTextFromPDF(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract text: %w", err)
 	}
@@ -45,18 +38,24 @@ func ExtractPDF(filePath string) (*ExtractedDocument, error) {
 }
 
 // extractTextFromPDF extracts text content from a PDF file.
-// ponytail: pdfcpu v0.13.0 doesn't expose simple text extraction.
-// This validates the PDF is readable; full text extraction via content
-// stream parsing or specialized library (unidoc, etc) is a future step.
-func extractTextFromPDF(file *os.File) (string, error) {
-	_, err := api.ReadContext(file, api.LoadConfiguration())
+func extractTextFromPDF(filePath string) (string, error) {
+	doc, err := gxpdf.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read PDF context: %w", err)
+		return "", fmt.Errorf("failed to open PDF: %w", err)
+	}
+	defer doc.Close()
+
+	var text strings.Builder
+	pageCount := doc.PageCount()
+	for i := 0; i < pageCount; i++ {
+		pageText, err := doc.ExtractTextFromPage(i)
+		if err != nil {
+			return "", fmt.Errorf("failed to extract text from page %d: %w", i, err)
+		}
+		text.WriteString(pageText)
 	}
 
-	// ponytail: return empty string for now.
-	// The PDF is validated as readable; text extraction deferred.
-	return "", nil
+	return text.String(), nil
 }
 
 // extractMetadata extracts depot number and depot holder from PDF text.
