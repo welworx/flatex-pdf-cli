@@ -92,6 +92,36 @@ func TestParseTradeBuy(t *testing.T) {
 	}
 }
 
+// TestParseTradeIdentifiers verifies extraction of the order number
+// (Auftragsnummer), transaction number (Transaktion-Nr.) and execution venue
+// (Ausf.platz/-art) from a trade confirmation.
+func TestParseTradeIdentifiers(t *testing.T) {
+	text := "Auftragsnummer 999888777/1\n" +
+		"Ausf.platz/-artXETRA\n" +
+		"Wertpapierabrechnung Kauf GLOBAL X COPPER MINERS ET (IE0003Z9E2Y3/A3C7FZ)\n" +
+		"Handelstag 30.01.2026\n" +
+		"Ausgeführt: 35 St.Kurswert: 2.034,20 EUR\n" +
+		"Kurs: 58,120000 EURProvision: 0,00 EUR\n" +
+		"Devisenkurs: 1,000000\n" +
+		"Details dazu finden Sie im Steuerreport unter der Transaktion-Nr.: 8887776665.\n" +
+		"Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 31022213999"
+	doc := &extractor.ExtractedDocument{Filename: "trade.pdf", Text: text, DocumentType: "TRADE"}
+
+	tx, err := ParseTrade(doc)
+	if err != nil {
+		t.Fatalf("ParseTrade failed: %v", err)
+	}
+	if tx.OrderNumber != "999888777/1" {
+		t.Errorf("OrderNumber = %q, want 999888777/1", tx.OrderNumber)
+	}
+	if tx.TransactionNumber != "8887776665" {
+		t.Errorf("TransactionNumber = %q, want 8887776665", tx.TransactionNumber)
+	}
+	if tx.ExecutionVenue != "XETRA" {
+		t.Errorf("ExecutionVenue = %q, want XETRA", tx.ExecutionVenue)
+	}
+}
+
 // TestParseDividend tests parsing a DIVIDEND statement.
 func TestParseDividend(t *testing.T) {
 	text := "Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : 5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR"
@@ -275,5 +305,38 @@ func TestParseThesaurierung(t *testing.T) {
 	}
 	if tx.ValueDate != "2026-06-30" {
 		t.Errorf("expected ValueDate=2026-06-30, got %s", tx.ValueDate)
+	}
+}
+
+func TestExtractFloatGermanNumbers(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  float64
+	}{
+		// German format: '.' thousands, ',' decimal
+		{"de plain decimal", "Betrag : 72,95 EUR", 72.95},
+		{"de thousands separator", "Betrag : 2.034,20 EUR", 2034.20},
+		{"de thousands with trailing space", "Betrag : 2.034,20  EUR", 2034.20},
+		{"de millions", "Betrag : 1.234.567,89 EUR", 1234567.89},
+		{"de negative thousands", "Betrag : -1.500,00 EUR", -1500.00},
+		// English format: ',' thousands, '.' decimal
+		{"en plain decimal", "Betrag : 72.95 EUR", 72.95},
+		{"en thousands separator", "Betrag : 2,034.20 EUR", 2034.20},
+		{"en millions", "Betrag : 1,234,567.89 EUR", 1234567.89},
+		{"en negative thousands", "Betrag : -1,500.00 EUR", -1500.00},
+		// no separators
+		{"integer no decimals", "Betrag : 50 EUR", 50},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := extractFloat(tc.input, `Betrag : (-?[\d.,]+)`)
+			if err != nil {
+				t.Fatalf("extractFloat(%q) returned error: %v", tc.input, err)
+			}
+			if got != tc.want {
+				t.Errorf("extractFloat(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
 	}
 }

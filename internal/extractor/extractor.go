@@ -11,11 +11,12 @@ import (
 
 // ExtractedDocument contains extracted text and metadata from a PDF file.
 type ExtractedDocument struct {
-	Filename     string
-	Text         string
-	DepotNumber  string
-	DepotHolder  string
-	DocumentType string
+	Filename      string
+	Text          string
+	DepotNumber   string
+	DepotHolder   string
+	AccountNumber string
+	DocumentType  string
 }
 
 // ExtractPDF extracts text and metadata from a PDF file.
@@ -25,16 +26,33 @@ func ExtractPDF(filePath string) (*ExtractedDocument, error) {
 		return nil, fmt.Errorf("failed to extract text: %w", err)
 	}
 
+	if !isGermanFlatex(text) {
+		return nil, fmt.Errorf("unsupported document language: only German flatex PDFs are implemented (English/other languages: not supported)")
+	}
+
 	depotNumber, depotHolder := extractMetadata(text)
 	documentType := detectDocumentType(text)
 
 	return &ExtractedDocument{
-		Filename:     filepath.Base(filePath),
-		Text:         text,
-		DepotNumber:  depotNumber,
-		DepotHolder:  depotHolder,
-		DocumentType: documentType,
+		Filename:      filepath.Base(filePath),
+		Text:          text,
+		DepotNumber:   depotNumber,
+		DepotHolder:   depotHolder,
+		AccountNumber: extractAccountNumber(text),
+		DocumentType:  documentType,
 	}, nil
+}
+
+// extractAccountNumber extracts the settlement account (Konto Nr.) from the text.
+// ponytail: bounded to 11 digits because PDF text extraction runs the next
+// page's header straight onto the number with no separator; widen if flatex
+// ever issues account numbers of a different length.
+func extractAccountNumber(text string) string {
+	regex := regexp.MustCompile(`Konto Nr\.\s*[:=]?\s*(\d{11})`)
+	if matches := regex.FindStringSubmatch(text); len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
 }
 
 // extractTextFromPDF extracts text content from a PDF file.
@@ -73,6 +91,27 @@ func extractMetadata(text string) (depotNumber, depotHolder string) {
 	}
 
 	return depotNumber, depotHolder
+}
+
+// isGermanFlatex reports whether the extracted text is a German flatex statement.
+// Only German documents are implemented; English/other-language flatex PDFs are
+// rejected here rather than silently mis-parsed (their field labels and keywords
+// differ). Fail-closed: proceed only on a confident German match.
+func isGermanFlatex(text string) bool {
+	lower := strings.ToLower(text)
+	// German-specific labels/keywords present in flatex German statements; none of
+	// these occur in an English-language statement.
+	anchors := []string{
+		"wertpapierabrechnung", "ertragsmitteilung", "depotnummer", "depotinhaber",
+		"auftragsdatum", "auftragsnummer", "ausführungszeit", "handelstag",
+		"valuta", "devisenkurs", "ausschüttung", "zinsen", "kauf", "verkauf",
+	}
+	for _, a := range anchors {
+		if strings.Contains(lower, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // detectDocumentType detects the document type based on keywords in the text.

@@ -6,6 +6,30 @@ import (
 	"testing"
 )
 
+// TestLanguageGate verifies German flatex text is accepted and English text is
+// rejected, so English PDFs fail fast instead of being silently mis-parsed.
+func TestLanguageGate(t *testing.T) {
+	german := "ﬂatexDEGIRO Bank AG\nAuftragsdatum 15.09.2025\nValuta 17.09.2025\nWertpapierabrechnung Kauf"
+	if !isGermanFlatex(german) {
+		t.Errorf("expected German flatex text to be recognized as German")
+	}
+
+	english := "flatexDEGIRO Bank AG\nSecurities Settlement - Purchase\nOrder date 2025-09-15\nValue date 2025-09-17\nQuantity 10 Total amount 50.00 EUR"
+	if isGermanFlatex(english) {
+		t.Errorf("expected English text to be rejected (English is not supported)")
+	}
+}
+
+// TestExtractAccountNumber verifies the settlement account (Konto Nr.) is
+// extracted. Real text extraction concatenates the next page's header directly
+// onto the account number with no line break, so the match must be bounded.
+func TestExtractAccountNumber(t *testing.T) {
+	text := "Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 31022213999035120227000"
+	if got := extractAccountNumber(text); got != "31022213999" {
+		t.Errorf("extractAccountNumber = %q, want 31022213999", got)
+	}
+}
+
 // TestExtractTextFromPDF tests the ExtractPDF function by verifying
 // that the Filename and DocumentType fields are properly set.
 func TestExtractTextFromPDF(t *testing.T) {
@@ -334,15 +358,15 @@ func TestIntegrationThesaurierung(t *testing.T) {
 	}
 }
 
-// TestTextExtractionFromRealPDF tests text extraction from real flatex PDFs.
-// It verifies that extractTextFromPDF successfully extracts text and that
-// the extracted content contains expected German keywords.
+// TestTextExtractionFromRealPDF tests text extraction from a flatex PDF.
+// It uses a synthetic, PII-free fixture (generated from a real document via the
+// redacting-flatex-pdfs skill, byte-for-byte visually identical to the original)
+// so the test runs in CI without exposing real account data.
 func TestTextExtractionFromRealPDF(t *testing.T) {
-	// Find a real PDF from sensitive_test_docs/
 	var pdfPath string
 	possiblePaths := []string{
-		"sensitive_test_docs/20250916_KaufFondsZertifikate_31022213999_517614092.pdf",
-		"../../sensitive_test_docs/20250916_KaufFondsZertifikate_31022213999_517614092.pdf",
+		"testdata/trade_sample_1.pdf",
+		"../../testdata/trade_sample_1.pdf",
 	}
 
 	for _, path := range possiblePaths {
@@ -353,7 +377,7 @@ func TestTextExtractionFromRealPDF(t *testing.T) {
 	}
 
 	if pdfPath == "" {
-		t.Skipf("no real PDF found in sensitive_test_docs/; skipping real PDF extraction test")
+		t.Skipf("no synthetic fixture found in testdata/; skipping PDF extraction test")
 	}
 
 	text, err := extractTextFromPDF(pdfPath)

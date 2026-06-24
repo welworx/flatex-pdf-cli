@@ -1,68 +1,32 @@
 # Test Data Directory
 
-This directory contains sample PDF documents used for integration testing of the flatex PDF CLI extractor.
+Synthetic, **PII-free** flatex PDF fixtures used by the integration tests in
+`internal/extractor/extractor_test.go`.
 
-## Sample Files
+## How these were made
 
-The following test files are expected by the integration tests in `internal/extractor/extractor_test.go`:
+Each fixture is generated from a real flatexDEGIRO document using the
+**`redacting-flatex-pdfs`** skill (`.claude/skills/redacting-flatex-pdfs/`).
+The skill replaces customer name, address, and Depot/Konto/Transaktion/
+Auftragsnummer with synthetic values while keeping the file byte-for-byte
+visually identical to the original. The real source documents live in the
+git-ignored `sensitive_test_docs/` directory and are **never committed**.
 
-### sample_trade.pdf
-- **Description**: Trade confirmation document (Handelsbestätigung)
-- **Document Type**: `TRADE`
-- **Expected Content**: Purchase or sale of securities
-- **Required Keywords**: "Kauf" (purchase) or "Verkauf" (sale)
-- **Metadata**: Depot number and depot holder information
+To regenerate or add fixtures, point the skill at a document in
+`sensitive_test_docs/` and drop the redacted output here.
 
-### sample_dividend.pdf
-- **Description**: Dividend statement (Ausschüttungsmitteilung)
-- **Document Type**: `DIVIDEND`
-- **Expected Content**: Dividend payment notification
-- **Required Keywords**: "Ausschüttung" (distribution/dividend)
-- **Metadata**: Depot number and depot holder information
+## Fixtures
 
-### sample_thesaurierung.pdf
-- **Description**: Earnings statement for thesaurified funds (Ertragsmitteilung)
-- **Document Type**: `THESAURIERUNG`
-- **Expected Content**: Reinvested earnings from funds
-- **Required Keywords**: "Ertragsmitteilung" (earnings statement)
-- **Metadata**: Depot number and depot holder information
+| File | Type | Detected as |
+|------|------|-------------|
+| `trade_sample_1.pdf`, `trade_sample_2.pdf` | Wertpapierabrechnung Kauf | `TRADE` |
+| `dividend_sample_1.pdf`, `dividend_sample_2.pdf` | Ertragsmitteilung / Ausschüttung | `DIVIDEND` |
 
-## Adding Test PDFs
+## Document type detection
 
-To enable full integration testing with real flatex documents:
+The extractor identifies types by German keywords:
 
-1. Obtain sample PDF documents from your flatex account (account statements, transaction confirmations, dividend notifications, etc.)
-2. Place them in this directory with the appropriate names matching the test expectations
-3. Run the integration tests: `go test ./internal/extractor -v -run TestIntegration`
-
-The tests will:
-- Skip gracefully if PDF files are not found
-- Run with mock text extraction if PDF files are present but invalid
-- Run full integration tests with actual PDF parsing if valid PDFs are provided
-
-## Current Test Behavior
-
-Currently, the integration tests run with mock text extraction. This allows the tests to validate:
-- Document type detection (TRADE, DIVIDEND, THESAURIERUNG, etc.)
-- Metadata extraction (depot number, depot holder)
-- End-to-end extraction workflow
-
-Once real flatex PDFs are added, the tests will validate actual PDF parsing and text extraction capabilities.
-
-## Document Type Detection
-
-The extractor identifies document types based on German language keywords:
-
-- **TRADE**: "Kauf" (purchase) or "Verkauf" (sale)
-- **DIVIDEND**: "Ausschüttung" (distribution)
-- **INTEREST**: "Zinsen" (interest)
-- **THESAURIERUNG**: "Ertragsmitteilung" (earnings statement)
-- **UNKNOWN**: No recognized keywords
-
-## Metadata Extraction
-
-All documents should contain:
-- **Depotnummer**: Portfolio/depot number (e.g., "31022213999")
-- **Depotinhaber**: Depot holder/account owner name (e.g., "Max Mustermann")
-
-The regex patterns support both colon (`:`) and equals (`=`) as separators.
+- **TRADE**: "Wertpapierabrechnung" + "Kauf" / "Verkauf"
+- **DIVIDEND**: "Ertragsmitteilung" + "Ausschüttung"
+- **INTEREST**: "Zinsen"
+- **UNKNOWN**: no recognized keywords
