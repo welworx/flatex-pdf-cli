@@ -234,14 +234,232 @@ func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 
 // ParseInterest parses an INTEREST document.
 func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
-	// Stub implementation
-	return nil, fmt.Errorf("ParseInterest not implemented yet")
+	text := doc.Text
+
+	// Extract ISIN
+	isin := extractISIN(text)
+	if isin == "" {
+		return nil, fmt.Errorf("ISIN not found in document")
+	}
+
+	// Extract value date (Valuta field)
+	valueDateStr := extractString(text, `Valuta\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	if valueDateStr == "" {
+		return nil, fmt.Errorf("value date not found in document")
+	}
+	// Convert DD.MM.YYYY to YYYY-MM-DD
+	parts := strings.Split(valueDateStr, ".")
+	var valueDate string
+	if len(parts) == 3 {
+		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+	}
+
+	// Extract gross amount
+	grossAmount, err := extractFloat(text, `Bruttobetrag\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("gross amount not found: %w", err)
+	}
+
+	// Extract gross currency
+	grossCurrency := extractString(text, `Bruttobetrag\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if grossCurrency == "" {
+		grossCurrency = "EUR"
+	}
+
+	// Extract withholding tax
+	withholdingTax, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("withholding tax not found: %w", err)
+	}
+
+	// Extract withholding tax currency
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if withholdingTaxCurrency == "" {
+		withholdingTaxCurrency = "EUR"
+	}
+
+	// Extract net amount (Endbetrag)
+	netAmount, err := extractFloat(text, `Endbetrag\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("net amount not found: %w", err)
+	}
+
+	// Extract net currency
+	netCurrency := extractString(text, `Endbetrag\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	if netCurrency == "" {
+		netCurrency = "EUR"
+	}
+
+	// Extract interest rate (Zinssatz)
+	interestRate, err := extractFloat(text, `Zinssatz\s*:\s*([\d\s.,]+)\s*%`)
+	if err != nil {
+		return nil, fmt.Errorf("interest rate not found: %w", err)
+	}
+
+	// Extract period (e.g., "01.01.2026 bis 31.03.2026")
+	periodFromStr := extractString(text, `(\d{2}\.\d{2}\.\d{4})\s*bis\s*\d{2}\.\d{2}\.\d{4}`)
+	periodToStr := extractString(text, `\d{2}\.\d{2}\.\d{4}\s*bis\s*(\d{2}\.\d{2}\.\d{4})`)
+
+	var periodFrom, periodTo string
+	if periodFromStr != "" {
+		parts := strings.Split(periodFromStr, ".")
+		if len(parts) == 3 {
+			periodFrom = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+	}
+	if periodToStr != "" {
+		parts := strings.Split(periodToStr, ".")
+		if len(parts) == 3 {
+			periodTo = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+	}
+
+	// Extract WKN from ISIN/WKN pattern
+	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
+	if wkn == "" {
+		wkn = extractWKN(text)
+	}
+
+	transaction := &schema.Transaction{
+		Source:                 doc.Filename,
+		DocumentType:           "INTEREST",
+		ISIN:                   isin,
+		WKN:                    wkn,
+		Date:                   valueDate,
+		GrossAmount:            grossAmount,
+		GrossCurrency:          grossCurrency,
+		WithholdingTax:         withholdingTax,
+		WithholdingTaxCurrency: withholdingTaxCurrency,
+		NetAmount:              netAmount,
+		NetCurrency:            netCurrency,
+		InterestRate:           interestRate,
+		PeriodFrom:             periodFrom,
+		PeriodTo:               periodTo,
+	}
+
+	return transaction, nil
 }
 
-// ParseThesaurierung parses a THESAURIERUNG document.
+// ParseThesaurierung parses a THESAURIERUNG (reinvestment/accumulation) document.
 func ParseThesaurierung(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
-	// Stub implementation
-	return nil, fmt.Errorf("ParseThesaurierung not implemented yet")
+	text := doc.Text
+
+	// Extract ISIN
+	isin := extractISIN(text)
+	if isin == "" {
+		return nil, fmt.Errorf("ISIN not found in document")
+	}
+
+	// Extract value date (Valuta field) - serves as main date for thesaurierung
+	valueDateStr := extractString(text, `Valuta\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	if valueDateStr == "" {
+		return nil, fmt.Errorf("value date not found in document")
+	}
+	// Convert DD.MM.YYYY to YYYY-MM-DD
+	parts := strings.Split(valueDateStr, ".")
+	var valueDate string
+	if len(parts) == 3 {
+		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+	}
+
+	// Extract ex-date (Extag field - optional)
+	exDateStr := extractString(text, `Extag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	var exDate string
+	if exDateStr != "" {
+		// Convert DD.MM.YYYY to YYYY-MM-DD
+		parts := strings.Split(exDateStr, ".")
+		if len(parts) == 3 {
+			exDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+	}
+
+	// Extract accrual date (Fälligkeitstag field - optional)
+	accrualDateStr := extractString(text, `Fälligkeitstag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
+	var accrualDate string
+	if accrualDateStr != "" {
+		// Convert DD.MM.YYYY to YYYY-MM-DD
+		parts := strings.Split(accrualDateStr, ".")
+		if len(parts) == 3 {
+			accrualDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+	}
+
+	// Extract quantity (shares held - St. field)
+	quantity, err := extractFloat(text, `St\.\s*:\s*([\d\s.,]+)\s*(?:Brutto|pro)`)
+	if err != nil {
+		return nil, fmt.Errorf("quantity not found: %w", err)
+	}
+
+	// Extract reinvestment per share (pro Stück field)
+	// Handles negative amounts (e.g., "-0,572 USD")
+	reinvestmentPerShare, err := extractFloat(text, `pro Stück\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("reinvestment per share not found: %w", err)
+	}
+
+	// Extract reinvestment currency
+	reinvestmentCurrency := extractString(text, `pro Stück\s*:\s*[-\d\s.,]+\s*([A-Z]{3})`)
+	if reinvestmentCurrency == "" {
+		reinvestmentCurrency = "EUR"
+	}
+
+	// Extract gross amount (Bruttothesaurierung - can be negative)
+	grossAmount, err := extractFloat(text, `Bruttothesaurierung\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		return nil, fmt.Errorf("gross amount not found: %w", err)
+	}
+
+	// Extract gross currency
+	grossCurrency := extractString(text, `Bruttothesaurierung\s*:\s*[-\d\s.,]+\s*([A-Z]{3})`)
+	if grossCurrency == "" {
+		grossCurrency = "EUR"
+	}
+
+	// Extract withholding tax (Einbeh. Steuer)
+	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`)
+	if err != nil {
+		// Default to 0 if not found
+		withholdingTax = 0
+	}
+
+	// Extract withholding tax currency
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[-\d\s.,]+\s*([A-Z]{3})`)
+	if withholdingTaxCurrency == "" {
+		withholdingTaxCurrency = "EUR"
+	}
+
+	// Extract exchange rate (optional, default to 1.0)
+	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
+	if err != nil {
+		exchangeRate = 1.0
+	}
+
+	// Extract WKN from ISIN/WKN pattern
+	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
+	if wkn == "" {
+		wkn = extractWKN(text)
+	}
+
+	transaction := &schema.Transaction{
+		Source:                 doc.Filename,
+		DocumentType:           "THESAURIERUNG",
+		ISIN:                   isin,
+		WKN:                    wkn,
+		Date:                   valueDate,
+		Quantity:               quantity,
+		ReinvestmentPerShare:   reinvestmentPerShare,
+		ReinvestmentCurrency:   reinvestmentCurrency,
+		GrossAmount:            grossAmount,
+		GrossCurrency:          grossCurrency,
+		WithholdingTax:         withholdingTax,
+		WithholdingTaxCurrency: withholdingTaxCurrency,
+		ExchangeRate:           exchangeRate,
+		ExDate:                 exDate,
+		ValueDate:              valueDate,
+		AccrualDate:            accrualDate,
+	}
+
+	return transaction, nil
 }
 
 // extractFloat extracts a float from text using a regex pattern.
