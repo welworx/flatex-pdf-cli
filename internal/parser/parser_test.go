@@ -36,18 +36,18 @@ func TestParseDividendRouting(t *testing.T) {
 	}
 }
 
-// TestParseThesaurierungRouting tests that the Parse function routes THESAURIERUNG documents correctly.
-func TestParseThesaurierungRouting(t *testing.T) {
+// TestParseAccumulatingRouting tests that the Parse function routes ACCUMULATING documents correctly.
+func TestParseAccumulatingRouting(t *testing.T) {
 	text := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
 	doc := &extractor.ExtractedDocument{
 		Filename:     "thesaurierung.pdf",
 		Text:         text,
-		DocumentType: "THESAURIERUNG",
+		DocumentType: "ACCUMULATING",
 	}
 
 	_, err := Parse(doc)
 	if err != nil {
-		t.Errorf("Parse should successfully route THESAURIERUNG document, got error: %v", err)
+		t.Errorf("Parse should successfully route ACCUMULATING document, got error: %v", err)
 	}
 }
 
@@ -119,6 +119,101 @@ func TestParseTradeIdentifiers(t *testing.T) {
 	}
 	if tx.ExecutionVenue != "XETRA" {
 		t.Errorf("ExecutionVenue = %q, want XETRA", tx.ExecutionVenue)
+	}
+}
+
+// TestParseCrypto tests parsing a Sammelabrechnung Kryptowerte (crypto settlement).
+func TestParseCrypto(t *testing.T) {
+	// Layout mirrors gxpdf extraction of the real doc (two columns merged per line).
+	text := "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n" +
+		"Ihr Verwahrkonto bei Tangany GmbH: 44000000041\n" +
+		"Inhaber: Dr. Stefan Berger\n" +
+		"Nr.999000111/1    Kauf                           BITCOIN\n" +
+		"Ordervolumen: 0,014 St. Handelsplatz: Tradias\n" +
+		"davon ausgef.: 0,014 St. Schlusstag: 29.01.2026, 16:00 Uhr\n" +
+		"Kurs: 72.462,2200 EUR Kurswert: 1.014,47 EUR\n" +
+		"Devisenkurs: Provision: 5,07 EUR\n" +
+		"Bew-Faktor: 1,0000\n" +
+		"Verwahrart: Kryptoverwahrung\n" +
+		"Kryptoverwahrer: Tangany GmbH **Einbeh. Steuer: 0,00 EUR\n" +
+		"Gewinn/Verlust: 0,00 EUR\n" +
+		"Valuta: 30.01.2026 Endbetrag: -1.019,54 EUR\n" +
+		"** Transaktion-Nr.: 4400000044\n" +
+		"Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 44000000042"
+	doc := &extractor.ExtractedDocument{Filename: "krypto.pdf", Text: text, DocumentType: "CRYPTO"}
+
+	tx, err := ParseCrypto(doc)
+	if err != nil {
+		t.Fatalf("ParseCrypto failed: %v", err)
+	}
+	checks := []struct {
+		name string
+		got  interface{}
+		want interface{}
+	}{
+		{"DocumentType", tx.DocumentType, "CRYPTO"},
+		{"Type", tx.Type, "BUY"},
+		{"SecurityName", tx.SecurityName, "BITCOIN"},
+		{"OrderNumber", tx.OrderNumber, "999000111/1"},
+		{"TransactionNumber", tx.TransactionNumber, "4400000044"},
+		{"Quantity", tx.Quantity, 0.014},
+		{"Price", tx.Price, 72462.22},
+		{"GrossValue", tx.GrossValue, 1014.47},
+		{"Provision", tx.Provision, 5.07},
+		{"FinalAmount", tx.FinalAmount, -1019.54},
+		{"Date", tx.Date, "2026-01-29"},
+		{"ValueDate", tx.ValueDate, "2026-01-30"},
+		{"CustodyType", tx.CustodyType, "Kryptoverwahrung"},
+		{"Depositary", tx.Depositary, "Tangany GmbH"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+// TestParseOrderConfirmation tests parsing a Sammelauftragsbestätigung, which
+// lists multiple pending orders and must yield one transaction per order.
+func TestParseOrderConfirmation(t *testing.T) {
+	// Layout mirrors gxpdf extraction of the real doc. Bezeichnung and venue are
+	// not always space-separated (see order[1] "…MINERS ETXETRA").
+	text := "Sammelauftragsbestätigung\n" +
+		"Ihre Depotnummer:33000000031\n" +
+		"Depotinhaber:Dr. Lukas Hofer\n" +
+		"Auftrags-Nr ISIN Bezeichnung Ausf.platz/-art\n" +
+		"WKN Geschäftsart/Auftr.DatumStücke/Nominale\n" +
+		"330000111 XFC000A2YY6Q BITCOIN Tradias\n" +
+		"992668 Kauf vom 28.01.2026 0,014 St.\n" +
+		"Gültig bis: 28.02.2026\n" +
+		"Limit: 72.500,000 EUR\n" +
+		"330000222 IE0003Z9E2Y3 GLOBAL X COPPER MINERS ETXETRA\n" +
+		"A3C7FZ Kauf vom 28.01.2026 35,00 St.\n" +
+		"Gültig bis: 27.02.2026\n" +
+		"Limit: 59,500 EUR\n"
+	doc := &extractor.ExtractedDocument{Filename: "order.pdf", Text: text, DocumentType: "ORDER"}
+
+	txs, err := ParseOrderConfirmation(doc)
+	if err != nil {
+		t.Fatalf("ParseOrderConfirmation failed: %v", err)
+	}
+	if len(txs) != 2 {
+		t.Fatalf("expected 2 orders, got %d", len(txs))
+	}
+
+	a := txs[0]
+	if a.OrderNumber != "330000111" || a.ISIN != "XFC000A2YY6Q" || a.SecurityName != "BITCOIN Tradias" ||
+		a.WKN != "992668" || a.Type != "BUY" ||
+		a.Date != "2026-01-28" || a.Quantity != 0.014 || a.ValidUntil != "2026-02-28" ||
+		a.Limit != 72500.0 || a.DocumentType != "ORDER" {
+		t.Errorf("order[0] mismatch: %+v", a)
+	}
+
+	b := txs[1]
+	if b.OrderNumber != "330000222" || b.ISIN != "IE0003Z9E2Y3" || b.SecurityName != "GLOBAL X COPPER MINERS ETXETRA" ||
+		b.WKN != "A3C7FZ" || b.Type != "BUY" ||
+		b.Quantity != 35.0 || b.ValidUntil != "2026-02-27" || b.Limit != 59.5 {
+		t.Errorf("order[1] mismatch: %+v", b)
 	}
 }
 
@@ -252,23 +347,23 @@ func TestParseInterest(t *testing.T) {
 	}
 }
 
-// TestParseThesaurierung tests parsing a THESAURIERUNG (reinvestment) statement.
-func TestParseThesaurierung(t *testing.T) {
+// TestParseAccumulating tests parsing a ACCUMULATING (reinvestment) statement.
+func TestParseAccumulating(t *testing.T) {
 	text := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
 	doc := &extractor.ExtractedDocument{
 		Filename:     "thesaurierung.pdf",
 		Text:         text,
-		DocumentType: "THESAURIERUNG",
+		DocumentType: "ACCUMULATING",
 	}
 
-	tx, err := ParseThesaurierung(doc)
+	tx, err := ParseAccumulating(doc)
 	if err != nil {
-		t.Fatalf("ParseThesaurierung failed: %v", err)
+		t.Fatalf("ParseAccumulating failed: %v", err)
 	}
 
 	// Verify core fields
-	if tx.DocumentType != "THESAURIERUNG" {
-		t.Errorf("expected DocumentType=THESAURIERUNG, got %s", tx.DocumentType)
+	if tx.DocumentType != "ACCUMULATING" {
+		t.Errorf("expected DocumentType=ACCUMULATING, got %s", tx.DocumentType)
 	}
 	if tx.ISIN != "IE00B5L8K969" {
 		t.Errorf("expected ISIN=IE00B5L8K969, got %s", tx.ISIN)

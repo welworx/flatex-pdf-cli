@@ -118,6 +118,15 @@ func isGermanFlatex(text string) bool {
 func detectDocumentType(text string) string {
 	lowerText := strings.ToLower(text)
 
+	// Crypto settlement and order confirmations also contain "Kauf", so they
+	// must be checked before the generic TRADE keyword.
+	if strings.Contains(lowerText, "sammelabrechnung") && strings.Contains(lowerText, "kryptowerte") {
+		return "CRYPTO"
+	}
+	if strings.Contains(lowerText, "sammelauftragsbestätigung") {
+		return "ORDER"
+	}
+
 	// Check for TRADE keywords
 	if strings.Contains(lowerText, "kauf") || strings.Contains(lowerText, "verkauf") {
 		return "TRADE"
@@ -133,9 +142,9 @@ func detectDocumentType(text string) string {
 		return "INTEREST"
 	}
 
-	// Check for THESAURIERUNG keywords
+	// Check for ACCUMULATING keywords
 	if strings.Contains(lowerText, "ertragsmitteilung") {
-		return "THESAURIERUNG"
+		return "ACCUMULATING"
 	}
 
 	return "UNKNOWN"

@@ -54,7 +54,7 @@ func TestExtractTextFromPDF(t *testing.T) {
 
 // TestDocumentTypeDetection tests keyword-based document type detection.
 // Tests the mapping: Kauf→TRADE, Verkauf→TRADE, Ausschüttung→DIVIDEND,
-// Zinsen→INTEREST, Ertragsmitteilung→THESAURIERUNG
+// Zinsen→INTEREST, Ertragsmitteilung→ACCUMULATING
 func TestDocumentTypeDetection(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -82,9 +82,19 @@ func TestDocumentTypeDetection(t *testing.T) {
 			expected: "INTEREST",
 		},
 		{
-			name:     "Ertragsmitteilung should be THESAURIERUNG",
+			name:     "Ertragsmitteilung should be ACCUMULATING",
 			text:     "Ertragsmitteilung für thesaurierte Fonds",
-			expected: "THESAURIERUNG",
+			expected: "ACCUMULATING",
+		},
+		{
+			name:     "Sammelauftragsbestätigung should be ORDER (despite Kauf)",
+			text:     "Sammelauftragsbestätigung\nKauf vom 28.01.2026",
+			expected: "ORDER",
+		},
+		{
+			name:     "Sammelabrechnung Kryptowerte should be CRYPTO (despite Kauf)",
+			text:     "Sammelabrechnung (Kauf/-verkauf Kryptowerte)",
+			expected: "CRYPTO",
 		},
 		{
 			name:     "Unknown keywords should return UNKNOWN",
@@ -286,11 +296,11 @@ func TestIntegrationDividendStatement(t *testing.T) {
 	}
 }
 
-// TestIntegrationThesaurierung tests end-to-end extraction of a thesaurierung statement PDF.
-// It verifies document type detection for THESAURIERUNG documents with sample text.
+// TestIntegrationAccumulating tests end-to-end extraction of a thesaurierung statement PDF.
+// It verifies document type detection for ACCUMULATING documents with sample text.
 // NOTE: This test uses mocked text extraction. When real flatex PDFs are available,
 // place sample_thesaurierung.pdf in testdata/ and the test will use the actual PDF.
-func TestIntegrationThesaurierung(t *testing.T) {
+func TestIntegrationAccumulating(t *testing.T) {
 	// Try to load real PDF if available
 	var pdfPath string
 	possiblePaths := []string{
@@ -307,10 +317,10 @@ func TestIntegrationThesaurierung(t *testing.T) {
 
 	// If no real PDF, test with expected behavior when text extraction is implemented
 	if pdfPath == "" {
-		// Mock test: verify document type detection for THESAURIERUNG keywords
+		// Mock test: verify document type detection for ACCUMULATING keywords
 		docType := detectDocumentType("Ertragsmitteilung für thesaurierte Fonds\nDepotnummer: 31022213999\nDepotinhaber: Max Mustermann")
-		if docType != "THESAURIERUNG" {
-			t.Errorf("expected DocumentType 'THESAURIERUNG', got '%s'", docType)
+		if docType != "ACCUMULATING" {
+			t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", docType)
 		}
 
 		depotNum, depotHolder := extractMetadata("Depotnummer: 31022213999\nDepotinhaber: Max Mustermann")
@@ -332,8 +342,8 @@ func TestIntegrationThesaurierung(t *testing.T) {
 
 		// Still run mock test
 		docType := detectDocumentType("Ertragsmitteilung für thesaurierte Fonds\nDepotnummer: 31022213999\nDepotinhaber: Max Mustermann")
-		if docType != "THESAURIERUNG" {
-			t.Errorf("expected DocumentType 'THESAURIERUNG', got '%s'", docType)
+		if docType != "ACCUMULATING" {
+			t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", docType)
 		}
 		return
 	}
@@ -343,9 +353,9 @@ func TestIntegrationThesaurierung(t *testing.T) {
 		t.Errorf("expected filename 'sample_thesaurierung.pdf', got '%s'", doc.Filename)
 	}
 
-	// Verify document type is detected as THESAURIERUNG
-	if doc.DocumentType != "THESAURIERUNG" {
-		t.Errorf("expected DocumentType 'THESAURIERUNG', got '%s'", doc.DocumentType)
+	// Verify document type is detected as ACCUMULATING
+	if doc.DocumentType != "ACCUMULATING" {
+		t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", doc.DocumentType)
 	}
 
 	// Verify metadata extraction

@@ -16,6 +16,7 @@ type Transaction struct {
 	DocumentType      string `json:"document_type"`
 	ISIN              string `json:"isin"`
 	WKN               string `json:"wkn,omitempty"`
+	SecurityName      string `json:"security_name,omitempty"` // Bezeichnung (e.g. crypto without ISIN)
 	Date              string `json:"date"`
 
 	// TRADE fields
@@ -37,6 +38,10 @@ type Transaction struct {
 	Country         string  `json:"country,omitempty"`
 	ExecutionVenue  string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
+	// ORDER fields (Sammelauftragsbestätigung — pending orders)
+	Limit      float64 `json:"limit,omitempty"`       // Limit price
+	ValidUntil string  `json:"valid_until,omitempty"` // Gültig bis
+
 	// DIVIDEND fields
 	DistributionPerShare   float64 `json:"distribution_per_share,omitempty"`
 	DistributionCurrency   string  `json:"distribution_currency,omitempty"`
@@ -53,7 +58,7 @@ type Transaction struct {
 	PeriodFrom   string  `json:"period_from,omitempty"`
 	PeriodTo     string  `json:"period_to,omitempty"`
 
-	// THESAURIERUNG fields
+	// ACCUMULATING fields
 	ReinvestmentPerShare float64 `json:"reinvestment_per_share,omitempty"`
 	ReinvestmentCurrency string  `json:"reinvestment_currency,omitempty"`
 	AccrualDate          string  `json:"accrual_date,omitempty"`
