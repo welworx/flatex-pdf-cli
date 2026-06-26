@@ -132,8 +132,9 @@ Adding English support requires a real English sample to map the English labels.
 - **German only** — non-German PDFs are rejected (see Language Support).
 - **Metadata extraction (`depot_holder`, `depot_number`)** can be empty or noisy
   on documents whose layout places the value far from its label.
-- **Depot/account numbers** are matched at a fixed length (11 digits) to work
-  around a page-break run-on in text extraction; non-standard lengths won't match.
+- **Account number (`Konto Nr.`)** is matched at a fixed length (11 digits) to
+  work around a page-break run-on in text extraction; non-standard lengths won't
+  match. (The depot number is matched at any length.)
 - **Synthetic test fixtures** in `testdata/` are visually faithful and PII-free,
   but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
   fixtures only exercise *type detection*, not full field extraction (the parsers
@@ -350,12 +351,13 @@ flatex-pdf-cli/
 │       ├── transaction.go
 │       ├── output.go
 │       └── schema_test.go
-└── docs/                  # Additional documentation
+├── skill/                 # Agent skill (SKILL.md) + INSTALL.md
+└── testdata/              # PII-free sample PDFs for tests
 ```
 
 ## Dependencies
 
-- [pdfcpu](https://github.com/pdfcpu/pdfcpu) v0.13.0 — PDF text extraction
+- [gxpdf](https://github.com/coregx/gxpdf) v0.8.2 — PDF text extraction
 
 ## License
 
