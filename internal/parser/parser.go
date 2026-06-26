@@ -10,20 +10,34 @@ import (
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
-// Parse routes an ExtractedDocument to the appropriate parser based on DocumentType.
-func Parse(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// Parse routes an ExtractedDocument to the appropriate parser based on
+// DocumentType. It returns a slice because some document types (e.g. order
+// confirmations) contain multiple transactions.
+func Parse(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	switch doc.DocumentType {
 	case "TRADE":
-		return ParseTrade(doc)
+		return one(ParseTrade(doc))
 	case "DIVIDEND":
-		return ParseDividend(doc)
+		return one(ParseDividend(doc))
 	case "INTEREST":
-		return ParseInterest(doc)
-	case "THESAURIERUNG":
-		return ParseThesaurierung(doc)
+		return one(ParseInterest(doc))
+	case "ACCUMULATING":
+		return one(ParseAccumulating(doc))
+	case "CRYPTO":
+		return one(ParseCrypto(doc))
+	case "ORDER":
+		return ParseOrderConfirmation(doc)
 	default:
 		return nil, fmt.Errorf("unknown document type: %s", doc.DocumentType)
 	}
+}
+
+// one wraps a single-transaction parser result into a slice.
+func one(tx *schema.Transaction, err error) ([]*schema.Transaction, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []*schema.Transaction{tx}, nil
 }
 
 // ParseTrade parses a TRADE document.
@@ -116,6 +130,126 @@ func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	}
 
 	return transaction, nil
+}
+
+// ParseCrypto parses a Sammelabrechnung Kryptowerte (crypto buy/sell settlement).
+// Crypto positions have no ISIN; the security is identified by name (e.g. BITCOIN).
+func ParseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+	text := doc.Text
+
+	// "Nr.<order>/N    Kauf    <NAME>" — order number, side and security name.
+	side := extractString(text, `Nr\.[\d/]+\s+(Kauf|Verkauf)`)
+	if side == "" {
+		return nil, fmt.Errorf("crypto order line not found")
+	}
+	tradeType := "BUY"
+	if side == "Verkauf" {
+		tradeType = "SELL"
+	}
+
+	name := extractString(text, `Nr\.[\d/]+\s+(?:Kauf|Verkauf)\s+([^\n]+)`)
+	if name == "" {
+		return nil, fmt.Errorf("crypto security name not found")
+	}
+
+	// Schlusstag is the trade date (may be followed by a time).
+	date := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
+	if date == "" {
+		return nil, fmt.Errorf("Schlusstag not found in document")
+	}
+
+	quantity, err := extractFloat(text, `davon ausgef\.:\s*([\d.,]+)\s*St\.`)
+	if err != nil {
+		return nil, fmt.Errorf("executed quantity not found: %w", err)
+	}
+
+	// Note: "Kurs:" is case-sensitive and does not match "Devisenkurs:".
+	price, err := extractFloat(text, `Kurs:\s*([\d.,]+)\s*EUR`)
+	if err != nil {
+		return nil, fmt.Errorf("price not found: %w", err)
+	}
+	grossValue, err := extractFloat(text, `Kurswert:\s*([\d.,]+)\s*EUR`)
+	if err != nil {
+		return nil, fmt.Errorf("gross value not found: %w", err)
+	}
+
+	provision, _ := extractFloat(text, `Provision:\s*([\d.,]+)\s*EUR`)
+	withholdingTax, _ := extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`)
+	gainLoss, _ := extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`)
+	finalAmount, _ := extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`)
+
+	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
+	if err != nil {
+		exchangeRate = 1.0
+	}
+
+	return &schema.Transaction{
+		Source:            doc.Filename,
+		OrderNumber:       extractString(text, `Nr\.([\d/]+)`),
+		TransactionNumber: extractString(text, `Transaktion-Nr\.:\s*(\d+)`),
+		DocumentType:      "CRYPTO",
+		SecurityName:      name,
+		Date:              date,
+		Type:              tradeType,
+		Quantity:          quantity,
+		Price:             price,
+		PriceCurrency:     "EUR",
+		GrossValue:        grossValue,
+		Provision:         provision,
+		WithholdingTax:    withholdingTax,
+		GainLoss:          gainLoss,
+		ExchangeRate:      exchangeRate,
+		FinalAmount:       finalAmount,
+		FinalCurrency:     "EUR",
+		CustodyType:       extractString(text, `Verwahrart:\s*([^\n*]+)`),
+		Depositary:        extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
+		ValueDate:         convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
+	}, nil
+}
+
+// orderBlockRe matches one pending-order block of a Sammelauftragsbestätigung as
+// extracted by gxpdf (two columns are merged per line):
+//
+//	<Auftrags-Nr> <ISIN> <Bezeichnung [+ venue]>
+//	<WKN> Kauf|Verkauf vom <date> <qty> St.
+//	Gültig bis: <date>
+//	Limit: <price> EUR
+//
+// The Bezeichnung and Ausf.platz/-art share a column boundary that gxpdf does not
+// always separate with a space (e.g. "…MINERS ETXETRA"), so they are captured
+// together as the security name rather than split unreliably.
+var orderBlockRe = regexp.MustCompile(
+	`(\d{9}) ([A-Z0-9]{12}) ([^\n]+)\n([A-Z0-9]{6}) (Kauf|Verkauf) vom (\d{2}\.\d{2}\.\d{4}) ([\d.,]+) St\.\nGültig bis: (\d{2}\.\d{2}\.\d{4})\nLimit: ([\d.,]+) EUR`)
+
+// ParseOrderConfirmation parses a Sammelauftragsbestätigung into one transaction
+// per pending order listed in the document.
+func ParseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+	matches := orderBlockRe.FindAllStringSubmatch(doc.Text, -1)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no orders found in document")
+	}
+
+	var txs []*schema.Transaction
+	for _, m := range matches {
+		tradeType := "BUY"
+		if m[5] == "Verkauf" {
+			tradeType = "SELL"
+		}
+		txs = append(txs, &schema.Transaction{
+			Source:       doc.Filename,
+			OrderNumber:  m[1],
+			DocumentType: "ORDER",
+			ISIN:         m[2],
+			SecurityName: strings.TrimSpace(m[3]),
+			WKN:          m[4],
+			Type:         tradeType,
+			Date:         convertGermanDate(m[6]),
+			Quantity:     mustFloat(m[7]),
+			ValidUntil:   convertGermanDate(m[8]),
+			Limit:        mustFloat(m[9]),
+		})
+	}
+	return txs, nil
 }
 
 // ParseDividend parses a DIVIDEND document.
@@ -348,8 +482,8 @@ func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	return transaction, nil
 }
 
-// ParseThesaurierung parses a THESAURIERUNG (reinvestment/accumulation) document.
-func ParseThesaurierung(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// ParseAccumulating parses a ACCUMULATING (reinvestment/accumulation) document.
+func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// Extract ISIN
@@ -450,7 +584,7 @@ func ParseThesaurierung(doc *extractor.ExtractedDocument) (*schema.Transaction, 
 
 	transaction := &schema.Transaction{
 		Source:                 doc.Filename,
-		DocumentType:           "THESAURIERUNG",
+		DocumentType:           "ACCUMULATING",
 		ISIN:                   isin,
 		WKN:                    wkn,
 		Date:                   valueDate,
@@ -485,6 +619,21 @@ func extractFloat(text, pattern string) (float64, error) {
 	}
 
 	return f, nil
+}
+
+// mustFloat parses a German/English-formatted number, returning 0 on failure.
+func mustFloat(s string) float64 {
+	f, _ := strconv.ParseFloat(normalizeDecimal(s), 64)
+	return f
+}
+
+// convertGermanDate converts "DD.MM.YYYY" to "YYYY-MM-DD" (empty if not 3 parts).
+func convertGermanDate(s string) string {
+	p := strings.Split(s, ".")
+	if len(p) != 3 {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s-%s", p[2], p[1], p[0])
 }
 
 // normalizeDecimal converts a German (1.234,56) or English (1,234.56) formatted

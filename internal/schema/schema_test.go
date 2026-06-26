@@ -124,11 +124,11 @@ func TestDividendTransactionMarshal(t *testing.T) {
 	}
 }
 
-func TestThesaurierungTransactionMarshal(t *testing.T) {
+func TestAccumulatingTransactionMarshal(t *testing.T) {
 	tx := Transaction{
 		Source:               "flatex",
 		OrderNumber:          "999888777/1",
-		DocumentType:         "THESAURIERUNG",
+		DocumentType:         "ACCUMULATING",
 		ISIN:                 "IE00B5L8K969",
 		Date:                 "2024-06-20",
 		Quantity:             4.75,
@@ -145,7 +145,7 @@ func TestThesaurierungTransactionMarshal(t *testing.T) {
 
 	jsonStr := string(data)
 
-	// Verify JSON contains "THESAURIERUNG"
+	// Verify JSON contains "ACCUMULATING"
 	if jsonStr == "" {
 		t.Error("JSON serialization produced empty string")
 	}
@@ -169,8 +169,8 @@ func TestThesaurierungTransactionMarshal(t *testing.T) {
 	if rtx.ReinvestmentCurrency != "EUR" {
 		t.Errorf("ReinvestmentCurrency mismatch: got %q, want %q", rtx.ReinvestmentCurrency, "EUR")
 	}
-	if rtx.DocumentType != "THESAURIERUNG" {
-		t.Errorf("DocumentType mismatch: got %q, want %q", rtx.DocumentType, "THESAURIERUNG")
+	if rtx.DocumentType != "ACCUMULATING" {
+		t.Errorf("DocumentType mismatch: got %q, want %q", rtx.DocumentType, "ACCUMULATING")
 	}
 }
 
