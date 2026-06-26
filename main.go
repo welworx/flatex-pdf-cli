@@ -13,12 +13,24 @@ import (
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
+var version = ""
+
 func main() {
 	outputFile := flag.String("o", "", "output file (stdout if not provided)")
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
+	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		v := version
+		if v == "" {
+			v = "dev"
+		}
+		fmt.Printf("flatex-pdf-cli version %s\n", v)
+		os.Exit(0)
+	}
 
 	args := flag.Args()
 	if len(args) == 0 {
@@ -159,10 +171,10 @@ Process PDF files from flatex and extract transaction data.
 
 Options:
   -o FILE              output file (stdout if not provided)
-  --include-source     add source filename to each transaction
-  --include-metadata   wrap output with depot metadata
-  --quiet              hide skipped/problematic files; emit only valid JSON
-  -h, --help           show this help message
+  -include-source      add source filename to each transaction
+  -include-metadata    wrap output with depot metadata
+  -quiet               hide skipped/problematic files; emit only valid JSON
+  -version             show version and exit
 
 Arguments:
   <path>               path to PDF file or directory containing PDFs

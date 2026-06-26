@@ -9,20 +9,21 @@ Turn German flatexDEGIRO broker PDFs into structured JSON. The CLI does the
 PDF text extraction, document-type detection, and field parsing; you just invoke
 it and consume the JSON on stdout.
 
-## Install (one time)
+## Check setup
 
-The tool is a single self-contained Go binary (no runtime deps for the end user).
+**First time?** Verify the tool is installed:
 
 ```bash
-# Option A — go install (Go 1.21+)
-go install github.com/welworx/flatex-pdf-cli@latest   # binary lands in $(go env GOPATH)/bin
-
-# Option B — build from source
-git clone https://github.com/welworx/flatex-pdf-cli.git
-cd flatex-pdf-cli && go build -o flatex-pdf-cli .
+flatex-pdf-cli --help
 ```
 
-Verify: `flatex-pdf-cli --help` should print usage.
+If "command not found", see [Install](#install-one-time) below.
+
+## Install (one time)
+
+See [INSTALL.md](INSTALL.md) for detailed installation instructions.
+
+Quick: download the binary for your platform from the [releases page](https://github.com/welworx/flatex-pdf-cli/releases), or `go install github.com/welworx/flatex-pdf-cli@latest` (requires Go 1.21+).
 
 ## Usage
 
@@ -33,14 +34,15 @@ flatex-pdf-cli [flags] <file.pdf | directory>
 Recommended invocation for agents (pure JSON, account context, source tracking):
 
 ```bash
-flatex-pdf-cli --quiet --include-metadata --include-source /path/to/pdfs/
+flatex-pdf-cli -quiet -include-metadata -include-source /path/to/pdfs/
 ```
 
 Flags:
-- `--quiet` — emit **only** valid JSON on stdout; suppress per-file skip notices. Use this when parsing the output programmatically.
-- `--include-metadata` — wrap output as `{ "metadata": {...}, "transactions": [...] }` with depot number, holder, and account number.
-- `--include-source` — add `"source": "<filename>"` to each record (useful for a directory).
-- `-o FILE` — write to a file instead of stdout.
+- `-quiet` — hide skipped/problematic files; emit only valid JSON
+- `-include-metadata` — wrap output with depot metadata
+- `-include-source` — add source filename to each transaction
+- `-o FILE` — output file (stdout if not provided)
+- `-version` — show version and exit
 
 Behavior:
 - A directory is scanned recursively for `*.pdf`.
@@ -49,13 +51,13 @@ Behavior:
 
 ## Output
 
-Without `--include-metadata`, stdout is a JSON array of transaction objects.
+Without `-include-metadata`, stdout is a JSON array of transaction objects.
 Key fields (most are `omitempty`):
 
 | Field | Meaning |
 |---|---|
 | `document_type` | `TRADE`, `DIVIDEND`, `INTEREST`, `ACCUMULATING`, `ORDER`, or `CRYPTO` |
-| `source` | source filename (with `--include-source`) |
+| `source` | source filename (with `-include-source`) |
 | `isin`, `wkn` | security identifiers (crypto has none) |
 | `security_name` | name when there is no ISIN (crypto) or for orders |
 | `order_number`, `transaction_number` | Auftragsnummer / Transaktion-Nr. |
@@ -65,11 +67,11 @@ Key fields (most are `omitempty`):
 | `limit`, `valid_until` | ORDER only |
 | `custody_type`, `depositary` | e.g. CRYPTO `Kryptoverwahrung` / `Tangany GmbH` |
 
-`metadata` (with `--include-metadata`): `depot_number`, `depot_holder`, `account_number`.
+`metadata` (with `-include-metadata`): `depot_number`, `depot_holder`, `account_number`.
 
 ## Agent tips
 
-- Always pass `--quiet` when machine-reading the output, then `json.loads` stdout.
+- Always pass `-quiet` when machine-reading the output, then `json.loads` stdout.
 - A folder of mixed flatex documents parses in one call; group/aggregate the
   returned array by `document_type` as needed.
 - `ORDER` documents yield **one record per pending order**, so a single PDF can
