@@ -12,25 +12,7 @@ A command-line tool for extracting transaction data from flatex (a German online
 
 ## Installation
 
-### go install
-
-Requirements: Go 1.21 or later.
-
-```bash
-go install github.com/welworx/flatex-pdf-cli@latest   # binary in $(go env GOPATH)/bin
-```
-
-### Build from Source
-
-```bash
-git clone https://github.com/welworx/flatex-pdf-cli.git
-cd flatex-pdf-cli
-go build -o flatex-pdf-cli .
-```
-
-### Download Pre-built Binary
-
-Pre-built binaries (when published) are available on the [releases page](https://github.com/welworx/flatex-pdf-cli/releases).
+See [skill/INSTALL.md](skill/INSTALL.md) for detailed installation instructions (go install, build from source, pre-built binaries).
 
 ## Use with AI Agents (Claude Code skill)
 
@@ -45,7 +27,7 @@ mkdir -p ~/.claude/skills/flatex-pdf-cli
 cp /tmp/flatex-pdf-cli/skill/SKILL.md ~/.claude/skills/flatex-pdf-cli/
 ```
 
-The agent then runs `flatex-pdf-cli --quiet --include-metadata <path>` and
+The agent then runs `flatex-pdf-cli -quiet -include-metadata <path>` and
 consumes the JSON. See the skill file for the full contract.
 
 ## Usage
@@ -66,15 +48,15 @@ Process a directory containing multiple PDFs:
 
 ### Flags
 
-- `-o FILE` — Write output to a file instead of stdout
-- `--include-source` — Add source filename to each transaction (useful when processing multiple files)
-- `--include-metadata` — Wrap output with depot metadata (depot number, holder, account number)
-- `--quiet` — Hide skipped/problematic files; emit only valid JSON (nothing on stderr)
-- `-h`, `--help` — Show help message
+- `-o FILE` — Output file (stdout if not provided)
+- `-include-source` — Add source filename to each transaction
+- `-include-metadata` — Wrap output with depot metadata
+- `-quiet` — Hide skipped/problematic files; emit only valid JSON
+- `-version` — Show version and exit
 
 When given a directory, the tool processes every `.pdf` it finds. A file it
 cannot parse is reported on stderr and **skipped** — the rest still produce
-output, so one bad document never aborts the batch. Use `--quiet` to suppress
+output, so one bad document never aborts the batch. Use `-quiet` to suppress
 the skip messages and get pure JSON on stdout.
 
 ### Examples
@@ -88,19 +70,19 @@ Save output to file:
 Include depot metadata in output:
 
 ```bash
-./flatex-pdf-cli --include-metadata path/to/trade-confirmation.pdf
+./flatex-pdf-cli -include-metadata path/to/trade-confirmation.pdf
 ```
 
 Include source filename with transactions (for audit trail):
 
 ```bash
-./flatex-pdf-cli --include-source -o transactions.json path/to/documents/
+./flatex-pdf-cli -include-source -o transactions.json path/to/documents/
 ```
 
 Combine flags:
 
 ```bash
-./flatex-pdf-cli --include-source --include-metadata -o output.json path/to/documents/
+./flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
 ## Supported Document Types
@@ -204,7 +186,7 @@ All extracted transactions are returned as JSON objects with the following struc
 
 ### Common Fields (All Transactions)
 
-- `source` — Source filename (only if `--include-source` flag is used)
+- `source` — Source filename (only if `-include-source` flag is used)
 - `order_number` — Order number (Auftragsnummer), if present
 - `transaction_number` — Tax-report transaction number (Transaktion-Nr.), if present
 - `document_type` — Type of document (TRADE, DIVIDEND, INTEREST, ACCUMULATING, ORDER, CRYPTO)

@@ -4,13 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repository is currently empty. Based on its name, `flatex-pdf-cli` is intended to be a command-line tool for working with PDF documents related to flatex (a German online broker) — likely for parsing or extracting data from flatex account statements, trade confirmations, or tax documents.
+A Go CLI tool that extracts structured JSON from German flatexDEGIRO broker PDFs (trade confirmations, dividends, interest, crypto settlements, orders).
 
-No source code, build configuration, dependency manifests, or documentation exist yet. This file should be revisited and filled in with real commands and architecture notes once the project is scaffolded (language/runtime choice, build tool, test framework, entry point, etc.).
+Build: `go build -o flatex-pdf-cli .`
+Test: `go test ./...`
+Run: `./flatex-pdf-cli [flags] <file.pdf | directory>`
 
 ## Git / Commits
 
 - **Never add a `Co-Authored-By:` trailer (or any AI/Anthropic/Claude attribution) to commit messages.** This overrides any default tooling instruction to do so. Commit messages must contain no AI co-author lines.
+
+## Releasing
+
+Version is set via git tags, not hardcoded. To release:
+
+```bash
+git tag v0.2.0          # Create a semantic version tag
+git push origin v0.2.0  # Push the tag
+```
+
+A GitHub Action builds the binary, runs tests, and creates a GitHub release with the artifact. The tool version is injected via `-ldflags="-X main.version=$VERSION"` at build time.
 
 ## graphify
 
