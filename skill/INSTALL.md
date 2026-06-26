@@ -21,7 +21,7 @@ chmod +x flatex-pdf-cli_darwin_arm64
 mv flatex-pdf-cli_darwin_arm64 /usr/local/bin/flatex-pdf-cli
 ```
 
-## Option B — go install (Go 1.21+)
+## Option B — go install (Go 1.26+)
 
 ```bash
 go install github.com/welworx/flatex-pdf-cli@latest
