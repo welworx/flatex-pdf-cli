@@ -112,7 +112,6 @@ func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	executionVenue := extractString(text, `Ausf\.platz/-art\s*([^\n]+)`)
 
 	transaction := &schema.Transaction{
-		Source:            doc.Filename,
 		OrderNumber:       orderNumber,
 		TransactionNumber: transactionNumber,
 		DocumentType:      "TRADE",
@@ -184,7 +183,6 @@ func ParseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	}
 
 	return &schema.Transaction{
-		Source:            doc.Filename,
 		OrderNumber:       extractString(text, `Nr\.([\d/]+)`),
 		TransactionNumber: extractString(text, `Transaktion-Nr\.:\s*(\d+)`),
 		DocumentType:      "CRYPTO",
@@ -236,7 +234,6 @@ func ParseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transac
 			tradeType = "SELL"
 		}
 		txs = append(txs, &schema.Transaction{
-			Source:       doc.Filename,
 			OrderNumber:  m[1],
 			DocumentType: "ORDER",
 			ISIN:         m[2],
@@ -352,7 +349,6 @@ func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	transaction := &schema.Transaction{
-		Source:                 doc.Filename,
 		DocumentType:           "DIVIDEND",
 		ISIN:                   isin,
 		WKN:                    wkn,
@@ -463,7 +459,6 @@ func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	transaction := &schema.Transaction{
-		Source:                 doc.Filename,
 		DocumentType:           "INTEREST",
 		ISIN:                   isin,
 		WKN:                    wkn,
@@ -583,7 +578,6 @@ func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	}
 
 	transaction := &schema.Transaction{
-		Source:                 doc.Filename,
 		DocumentType:           "ACCUMULATING",
 		ISIN:                   isin,
 		WKN:                    wkn,
