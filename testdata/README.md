@@ -21,6 +21,12 @@ To regenerate or add fixtures, point the skill at a document in
 |------|------|-------------|
 | `trade_sample_1.pdf`, `trade_sample_2.pdf` | Wertpapierabrechnung Kauf | `TRADE` |
 | `dividend_sample_1.pdf`, `dividend_sample_2.pdf` | Ertragsmitteilung / Ausschüttung | `DIVIDEND` |
+| `orderbestaetigung_sample_1.pdf` | Sammelauftragsbestätigung (order confirmation) | not yet parsed |
+| `krypto_sample_1.pdf` | Sammelabrechnung Kryptowerte (crypto settlement) | not yet parsed |
+
+The last two are document types the parser does not yet handle; they exist so the
+skip-and-continue behaviour and any future parsers can be tested against PII-free
+samples of those layouts.
 
 ## Document type detection
 
