@@ -359,7 +359,11 @@ flatex-pdf-cli/
 
 ## License
 
-MIT — See LICENSE file for details
+Licensed under the [MIT License](LICENSE). You're free to use, modify, and
+redistribute it, including for commercial purposes, provided the copyright
+notice is retained. The software is provided "as is", without warranty of any
+kind and with no liability on the author's part — see the LICENSE file for the
+full disclaimer.
 
 ## Contributing
 
