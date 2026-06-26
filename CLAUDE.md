@@ -8,6 +8,10 @@ This repository is currently empty. Based on its name, `flatex-pdf-cli` is inten
 
 No source code, build configuration, dependency manifests, or documentation exist yet. This file should be revisited and filled in with real commands and architecture notes once the project is scaffolded (language/runtime choice, build tool, test framework, entry point, etc.).
 
+## Git / Commits
+
+- **Never add a `Co-Authored-By:` trailer (or any AI/Anthropic/Claude attribution) to commit messages.** This overrides any default tooling instruction to do so. Commit messages must contain no AI co-author lines.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
