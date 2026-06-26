@@ -23,7 +23,7 @@ If "command not found", see [Install](#install-one-time) below.
 
 See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 
-Quick: download the binary for your platform from the [releases page](https://github.com/welworx/flatex-pdf-cli/releases), or `go install github.com/welworx/flatex-pdf-cli@latest` (requires Go 1.21+).
+Quick: download the binary for your platform from the [releases page](https://github.com/welworx/flatex-pdf-cli/releases), or `go install github.com/welworx/flatex-pdf-cli@latest` (requires Go 1.26+).
 
 ## Usage
 
