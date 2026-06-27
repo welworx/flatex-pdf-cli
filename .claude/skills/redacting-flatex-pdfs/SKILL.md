@@ -9,7 +9,7 @@ description: Use when turning real flatexDEGIRO broker PDFs (Kauf/Verkauf trade 
 
 Real flatex statements contain a customer's name, address, and account numbers. To use them as test fixtures, replace that PII with **synthetic** values while keeping the page visually identical.
 
-**Core technique:** redact the exact PII text rectangles, then re-insert synthetic text at the same position in the *matching base-14 font*. flatex's embedded fonts are clones of standard fonts (`HerosBFO` ≈ Helvetica, `CursorBFO` ≈ Courier), so base-14 substitutes render indistinguishably. Do **not** try to reuse the embedded fonts — they are Identity-H subsets and silently fall back to Helvetica for new glyphs.
+**Core technique:** redact the exact PII text rectangles, then re-insert synthetic text at the same position in a *base-14 font*. The original flatex PDFs use embedded Identity-H fonts (`HerosBFO`, `CursorBFO`) throughout — including PII fields. Base-14 substitutes (Helvetica, Courier) are visually similar but technically distinct; the PII fields will render in a slightly different font than the surrounding document. For parsing purposes this does not matter — positions, sizes, and structure are preserved. Do **not** try to reuse the embedded fonts — they are Identity-H subsets and silently produce wrong glyphs for any character not already in the subset.
 
 Tools: **PyMuPDF (`fitz`)** for redaction, **Presidio** to *identify* PII candidates. No new repo script — run inline.
 
