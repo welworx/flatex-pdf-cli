@@ -96,7 +96,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		fmt.Println(string(jsonData))
+		os.Stdout.Write(jsonData)
 	}
 
 	os.Exit(0)
