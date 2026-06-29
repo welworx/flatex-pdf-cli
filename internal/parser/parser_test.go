@@ -520,7 +520,7 @@ func TestParseSparplanFromFixture(t *testing.T) {
 		t.Fatalf("ParseSparplan failed: %v", err)
 	}
 	if len(txs) != 12 {
-		t.Errorf("expected 12 transactions, got %d", len(txs))
+		t.Fatalf("expected 12 transactions, got %d", len(txs))
 	}
 
 	row0 := txs[0]
