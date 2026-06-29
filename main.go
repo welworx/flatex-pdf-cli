@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -76,12 +77,16 @@ func main() {
 		output = transactions
 	}
 
-	// Marshal to JSON
-	jsonData, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
+	// Marshal to JSON (SetEscapeHTML false so & stays & not &)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(output); err != nil {
 		fmt.Fprintf(os.Stderr, "error marshaling JSON: %v\n", err)
 		os.Exit(1)
 	}
+	jsonData := buf.Bytes()
 
 	// Write to file or stdout
 	if *outputFile != "" {
