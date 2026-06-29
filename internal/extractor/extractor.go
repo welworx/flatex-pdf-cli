@@ -84,10 +84,15 @@ func extractMetadata(text string) (depotNumber, depotHolder string) {
 		depotNumber = matches[1]
 	}
 
-	// Extract depot holder using regex
+	// Extract depot holder: try Depotinhaber label first, fall back to salutation
 	holderRegex := regexp.MustCompile(`Depotinhaber\s*[:=]\s*([^\n]+)`)
 	if matches := holderRegex.FindStringSubmatch(text); len(matches) > 1 {
 		depotHolder = strings.TrimSpace(matches[1])
+	} else {
+		salutationRegex := regexp.MustCompile(`Sehr geehrte[rn]?\s+(?:Herr|Frau)\s+(.+?),`)
+		if matches := salutationRegex.FindStringSubmatch(text); len(matches) > 1 {
+			depotHolder = strings.TrimSpace(matches[1])
+		}
 	}
 
 	return depotNumber, depotHolder
