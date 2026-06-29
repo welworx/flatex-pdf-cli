@@ -613,6 +613,7 @@ func ParseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, err
 
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
 	orderNumber := extractString(text, `Auftrags-Nr\s*:?\s*(\d+)`)
+	securityName := strings.TrimSpace(extractString(text, `Bezeichnung\s*:([^\n]+)`))
 
 	// Each row: K/V  Buchtag  Valuta  Stücke/Nom.  Ausf.-Kurs  EUR  Betrag  EUR
 	rowRe := regexp.MustCompile(
@@ -630,6 +631,7 @@ func ParseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, err
 			ISIN:          isin,
 			WKN:           wkn,
 			OrderNumber:   orderNumber,
+			SecurityName:  securityName,
 			Date:          convertGermanDate(m[2]),
 			Type:          tradeType,
 			Quantity:      mustFloat(m[3]),
