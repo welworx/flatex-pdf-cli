@@ -98,7 +98,7 @@ Edit the `TARGET` line, then paste the whole block into your terminal:
 TARGET=~/Documents/flatex-organized
 find ~/Downloads -name '*.pdf' | while IFS= read -r pdf; do
   json=$(flatex-pdf-cli -include-metadata -quiet "$pdf" 2>/dev/null) || continue
-  account=$(jq -r '(.metadata.account_number // .metadata.depot_number) // "unknown"' <<<"$json")
+  account=$(jq -r '(.metadata.depot_number // .metadata.account_number) // "unknown"' <<<"$json")
   date=$(jq -r '.transactions[0].date' <<<"$json")
   type=$(jq -r '.transactions[0].document_type' <<<"$json")
   dest="$TARGET/$account"
@@ -119,7 +119,7 @@ flatex-organize() {
 
   find "$src" -name '*.pdf' | while IFS= read -r pdf; do
     json=$(flatex-pdf-cli -include-metadata -quiet "$pdf" 2>/dev/null) || continue
-    account=$(jq -r '(.metadata.account_number // .metadata.depot_number) // "unknown"' <<<"$json")
+    account=$(jq -r '(.metadata.depot_number // .metadata.account_number) // "unknown"' <<<"$json")
     date=$(jq -r '.transactions[0].date' <<<"$json")
     type=$(jq -r '.transactions[0].document_type' <<<"$json")
     dest="$target/$account"
