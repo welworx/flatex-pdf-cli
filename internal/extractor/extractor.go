@@ -73,7 +73,7 @@ func extractTextFromPDF(filePath string) (string, error) {
 		text.WriteString(pageText)
 	}
 
-	return text.String(), nil
+	return strings.ToValidUTF8(text.String(), ""), nil
 }
 
 // extractMetadata extracts depot number and depot holder from PDF text.
