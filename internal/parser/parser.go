@@ -16,19 +16,19 @@ import (
 func Parse(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	switch doc.DocumentType {
 	case "TRADE":
-		return one(ParseTrade(doc))
+		return one(parseTrade(doc))
 	case "DIVIDEND":
-		return one(ParseDividend(doc))
+		return one(parseDividend(doc))
 	case "INTEREST":
-		return one(ParseInterest(doc))
+		return one(parseInterest(doc))
 	case "ACCUMULATING":
-		return one(ParseAccumulating(doc))
+		return one(parseAccumulating(doc))
 	case "CRYPTO":
-		return one(ParseCrypto(doc))
+		return one(parseCrypto(doc))
 	case "ORDER":
-		return ParseOrderConfirmation(doc)
+		return parseOrderConfirmation(doc)
 	case "SPARPLAN":
-		return ParseSparplan(doc)
+		return parseSparplan(doc)
 	default:
 		return nil, fmt.Errorf("unknown document type: %s", doc.DocumentType)
 	}
@@ -42,8 +42,8 @@ func one(tx *schema.Transaction, err error) ([]*schema.Transaction, error) {
 	return []*schema.Transaction{tx}, nil
 }
 
-// ParseTrade parses a TRADE document.
-func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// parseTrade parses a TRADE document.
+func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// Extract ISIN and WKN
@@ -133,9 +133,9 @@ func ParseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	return transaction, nil
 }
 
-// ParseCrypto parses a Sammelabrechnung Kryptowerte (crypto buy/sell settlement).
+// parseCrypto parses a Sammelabrechnung Kryptowerte (crypto buy/sell settlement).
 // Crypto positions have no ISIN; the security is identified by name (e.g. BITCOIN).
-func ParseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// "Nr.<order>/N    Kauf    <NAME>" — order number, side and security name.
@@ -221,9 +221,9 @@ func ParseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 var orderBlockRe = regexp.MustCompile(
 	`(\d{9}) ([A-Z0-9]{12}) ([^\n]+)\n([A-Z0-9]{6}) (Kauf|Verkauf) vom (\d{2}\.\d{2}\.\d{4}) ([\d.,]+) St\.\nGültig bis: (\d{2}\.\d{2}\.\d{4})\nLimit: ([\d.,]+) EUR`)
 
-// ParseOrderConfirmation parses a Sammelauftragsbestätigung into one transaction
+// parseOrderConfirmation parses a Sammelauftragsbestätigung into one transaction
 // per pending order listed in the document.
-func ParseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+func parseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	matches := orderBlockRe.FindAllStringSubmatch(doc.Text, -1)
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("no orders found in document")
@@ -251,8 +251,8 @@ func ParseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transac
 	return txs, nil
 }
 
-// ParseDividend parses a DIVIDEND document.
-func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// parseDividend parses a DIVIDEND document.
+func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// Extract ISIN
@@ -360,8 +360,8 @@ func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	return transaction, nil
 }
 
-// ParseInterest parses an INTEREST document.
-func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// parseInterest parses an INTEREST document.
+func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// Extract ISIN
@@ -451,8 +451,8 @@ func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	return transaction, nil
 }
 
-// ParseAccumulating parses a ACCUMULATING (reinvestment/accumulation) document.
-func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
+// parseAccumulating parses a ACCUMULATING (reinvestment/accumulation) document.
+func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	text := doc.Text
 
 	// Extract ISIN
@@ -553,10 +553,10 @@ func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	return transaction, nil
 }
 
-// ParseSparplan parses a "Sammelabrechnung aus" — an annual Sparplan settlement
+// parseSparplan parses a "Sammelabrechnung aus" — an annual Sparplan settlement
 // that lists each executed order as a table row. Returns one Transaction per row;
 // ISIN and order number are shared across all rows.
-func ParseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+func parseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	text := doc.Text
 
 	isin := extractISIN(text)
