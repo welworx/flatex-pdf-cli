@@ -19,8 +19,6 @@ func TestTradeTransactionMarshal(t *testing.T) {
 		PriceCurrency:   "EUR",
 		GrossValue:      50.01,
 		Provision:       5.99,
-		OwnCosts:        0.0,
-		ThirdPartyCosts: 0.0,
 		WithholdingTax:  0.0,
 		GainLoss:        0.0,
 		ExchangeRate:    1.0,
@@ -28,7 +26,6 @@ func TestTradeTransactionMarshal(t *testing.T) {
 		FinalCurrency:   "EUR",
 		CustodyType:     "depot",
 		Depositary:      "flatex",
-		Country:         "DE",
 	}
 
 	// Marshal to JSON
