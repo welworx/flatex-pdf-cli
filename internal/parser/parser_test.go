@@ -435,3 +435,90 @@ func TestExtractFloatGermanNumbers(t *testing.T) {
 		})
 	}
 }
+
+// TestParseSparplan tests parsing a Sammelabrechnung aus (annual Sparplan settlement).
+// The text mirrors gxpdf output: K/V, Buchtag, Valuta, Stücke/Nom., Ausf.-Kurs, Betrag.
+func TestParseSparplan(t *testing.T) {
+	text := "Sammelabrechnung aus\n" +
+		"Ihre Depotnummer: 31022213800\n" +
+		"Auftrags-Nr:0003207723\n" +
+		"ISIN: IE00B3RBWM25\n" +
+		"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" +
+		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n" +
+		"Verkauf 17.02.2025 19.02.2025 1,436948 138,1400 EUR 198,50 EUR\n"
+	doc := &extractor.ExtractedDocument{
+		Filename:     "sparplan.pdf",
+		Text:         text,
+		DocumentType: "SPARPLAN",
+	}
+
+	txs, err := ParseSparplan(doc)
+	if err != nil {
+		t.Fatalf("ParseSparplan failed: %v", err)
+	}
+	if len(txs) != 2 {
+		t.Fatalf("expected 2 transactions, got %d", len(txs))
+	}
+
+	a := txs[0]
+	if a.DocumentType != "SPARPLAN" {
+		t.Errorf("DocumentType = %q, want SPARPLAN", a.DocumentType)
+	}
+	if a.ISIN != "IE00B3RBWM25" {
+		t.Errorf("ISIN = %q, want IE00B3RBWM25", a.ISIN)
+	}
+	if a.OrderNumber != "0003207723" {
+		t.Errorf("OrderNumber = %q, want 0003207723", a.OrderNumber)
+	}
+	if a.Type != "BUY" {
+		t.Errorf("Type = %q, want BUY", a.Type)
+	}
+	if a.Date != "2025-01-15" {
+		t.Errorf("Date = %q, want 2025-01-15", a.Date)
+	}
+	if a.Quantity != 1.478695 {
+		t.Errorf("Quantity = %f, want 1.478695", a.Quantity)
+	}
+	if a.Price != 134.24 {
+		t.Errorf("Price = %f, want 134.24", a.Price)
+	}
+	if a.PriceCurrency != "EUR" {
+		t.Errorf("PriceCurrency = %q, want EUR", a.PriceCurrency)
+	}
+	if a.GrossValue != 200.00 {
+		t.Errorf("GrossValue = %f, want 200.00", a.GrossValue)
+	}
+
+	b := txs[1]
+	if b.Type != "SELL" {
+		t.Errorf("Type = %q, want SELL", b.Type)
+	}
+	if b.Date != "2025-02-17" {
+		t.Errorf("Date = %q, want 2025-02-17", b.Date)
+	}
+	if b.GrossValue != 198.50 {
+		t.Errorf("GrossValue = %f, want 198.50", b.GrossValue)
+	}
+}
+
+// TestParseSparplanRouting verifies Parse() routes SPARPLAN documents correctly.
+func TestParseSparplanRouting(t *testing.T) {
+	text := "Sammelabrechnung aus\n" +
+		"Auftrags-Nr:0003207723\n" +
+		"ISIN: IE00B3RBWM25\n" +
+		"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" +
+		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n"
+	doc := &extractor.ExtractedDocument{
+		Filename:     "sparplan.pdf",
+		Text:         text,
+		DocumentType: "SPARPLAN",
+	}
+
+	txs, err := Parse(doc)
+	if err != nil {
+		t.Fatalf("Parse routing failed: %v", err)
+	}
+	if len(txs) != 1 {
+		t.Errorf("expected 1 transaction via routing, got %d", len(txs))
+	}
+}
