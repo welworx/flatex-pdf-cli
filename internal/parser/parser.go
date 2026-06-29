@@ -266,23 +266,11 @@ func ParseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	if valueDateStr == "" {
 		return nil, fmt.Errorf("value date not found in document")
 	}
-	// Convert DD.MM.YYYY to YYYY-MM-DD
-	parts := strings.Split(valueDateStr, ".")
-	var valueDate string
-	if len(parts) == 3 {
-		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-	}
+	valueDate := convertGermanDate(valueDateStr)
 
 	// Extract ex-date (Extag field - may contain different date)
 	exDateStr := extractString(text, `Extag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
-	var exDate string
-	if exDateStr != "" {
-		// Convert DD.MM.YYYY to YYYY-MM-DD
-		parts := strings.Split(exDateStr, ".")
-		if len(parts) == 3 {
-			exDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-		}
-	}
+	exDate := convertGermanDate(exDateStr)
 
 	// Extract quantity (shares held)
 	quantity, err := extractFloat(text, `St\.\s*:\s*([\d\s.,]+)\s*Brutto`)
@@ -387,12 +375,7 @@ func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	if valueDateStr == "" {
 		return nil, fmt.Errorf("value date not found in document")
 	}
-	// Convert DD.MM.YYYY to YYYY-MM-DD
-	parts := strings.Split(valueDateStr, ".")
-	var valueDate string
-	if len(parts) == 3 {
-		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-	}
+	valueDate := convertGermanDate(valueDateStr)
 
 	// Extract gross amount
 	grossAmount, err := extractFloat(text, `Bruttobetrag\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
@@ -440,19 +423,8 @@ func ParseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	periodFromStr := extractString(text, `(\d{2}\.\d{2}\.\d{4})\s*bis\s*\d{2}\.\d{2}\.\d{4}`)
 	periodToStr := extractString(text, `\d{2}\.\d{2}\.\d{4}\s*bis\s*(\d{2}\.\d{2}\.\d{4})`)
 
-	var periodFrom, periodTo string
-	if periodFromStr != "" {
-		parts := strings.Split(periodFromStr, ".")
-		if len(parts) == 3 {
-			periodFrom = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-		}
-	}
-	if periodToStr != "" {
-		parts := strings.Split(periodToStr, ".")
-		if len(parts) == 3 {
-			periodTo = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-		}
-	}
+	periodFrom := convertGermanDate(periodFromStr)
+	periodTo := convertGermanDate(periodToStr)
 
 	// Extract WKN from ISIN/WKN pattern
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -494,34 +466,15 @@ func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	if valueDateStr == "" {
 		return nil, fmt.Errorf("value date not found in document")
 	}
-	// Convert DD.MM.YYYY to YYYY-MM-DD
-	parts := strings.Split(valueDateStr, ".")
-	var valueDate string
-	if len(parts) == 3 {
-		valueDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-	}
+	valueDate := convertGermanDate(valueDateStr)
 
 	// Extract ex-date (Extag field - optional)
 	exDateStr := extractString(text, `Extag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
-	var exDate string
-	if exDateStr != "" {
-		// Convert DD.MM.YYYY to YYYY-MM-DD
-		parts := strings.Split(exDateStr, ".")
-		if len(parts) == 3 {
-			exDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-		}
-	}
+	exDate := convertGermanDate(exDateStr)
 
 	// Extract accrual date (Fälligkeitstag field - optional)
 	accrualDateStr := extractString(text, `Fälligkeitstag\s*:\s*(\d{2}\.\d{2}\.\d{4})`)
-	var accrualDate string
-	if accrualDateStr != "" {
-		// Convert DD.MM.YYYY to YYYY-MM-DD
-		parts := strings.Split(accrualDateStr, ".")
-		if len(parts) == 3 {
-			accrualDate = fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
-		}
-	}
+	accrualDate := convertGermanDate(accrualDateStr)
 
 	// Extract quantity (shares held - St. field)
 	quantity, err := extractFloat(text, `St\.\s*:\s*([\d\s.,]+)\s*(?:Brutto|pro)`)
