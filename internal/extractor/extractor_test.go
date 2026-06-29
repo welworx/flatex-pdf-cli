@@ -430,7 +430,7 @@ func TestTextExtractionFromRealPDF(t *testing.T) {
 }
 
 // TestDetectSparplanFromFixture verifies that the synthetic sparplan fixture
-// is detected as SPARPLAN (not TRADE) and that depot metadata is extracted.
+// is detected as SPARPLAN (not TRADE).
 func TestDetectSparplanFromFixture(t *testing.T) {
 	pdfPath := "../../testdata/sparplan_sample_1.pdf"
 	if _, err := os.Stat(pdfPath); err != nil {

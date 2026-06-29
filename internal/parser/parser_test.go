@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"os"
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
@@ -498,6 +499,39 @@ func TestParseSparplan(t *testing.T) {
 	}
 	if b.GrossValue != 198.50 {
 		t.Errorf("GrossValue = %f, want 198.50", b.GrossValue)
+	}
+}
+
+// TestParseSparplanFromFixture is an integration test that loads the real sparplan
+// fixture PDF, runs ParseSparplan against it, and spot-checks the output.
+func TestParseSparplanFromFixture(t *testing.T) {
+	pdfPath := "../../testdata/sparplan_sample_1.pdf"
+	if _, err := os.Stat(pdfPath); err != nil {
+		t.Skipf("sparplan fixture not found at %s; skipping", pdfPath)
+	}
+
+	doc, err := extractor.ExtractPDF(pdfPath)
+	if err != nil {
+		t.Fatalf("ExtractPDF failed: %v", err)
+	}
+
+	txs, err := ParseSparplan(doc)
+	if err != nil {
+		t.Fatalf("ParseSparplan failed: %v", err)
+	}
+	if len(txs) != 12 {
+		t.Errorf("expected 12 transactions, got %d", len(txs))
+	}
+
+	row0 := txs[0]
+	if row0.DocumentType != "SPARPLAN" {
+		t.Errorf("DocumentType = %q, want SPARPLAN", row0.DocumentType)
+	}
+	if row0.Type != "BUY" {
+		t.Errorf("Type = %q, want BUY", row0.Type)
+	}
+	if row0.ISIN == "" {
+		t.Error("ISIN is empty on row 0")
 	}
 }
 
