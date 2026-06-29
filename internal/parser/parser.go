@@ -27,6 +27,8 @@ func Parse(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 		return one(ParseCrypto(doc))
 	case "ORDER":
 		return ParseOrderConfirmation(doc)
+	case "SPARPLAN":
+		return ParseSparplan(doc)
 	default:
 		return nil, fmt.Errorf("unknown document type: %s", doc.DocumentType)
 	}
@@ -596,6 +598,51 @@ func ParseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	}
 
 	return transaction, nil
+}
+
+// ParseSparplan parses a "Sammelabrechnung aus" — an annual Sparplan settlement
+// that lists each executed order as a table row. Returns one Transaction per row;
+// ISIN and order number are shared across all rows.
+func ParseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+	text := doc.Text
+
+	isin := extractISIN(text)
+	if isin == "" {
+		return nil, fmt.Errorf("ISIN not found in document")
+	}
+
+	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
+	orderNumber := extractString(text, `Auftrags-Nr\s*:?\s*(\d+)`)
+
+	// Each row: K/V  Buchtag  Valuta  Stücke/Nom.  Ausf.-Kurs  EUR  Betrag  EUR
+	rowRe := regexp.MustCompile(
+		`(Kauf|Verkauf)\s+(\d{2}\.\d{2}\.\d{4})\s+\d{2}\.\d{2}\.\d{4}\s+([\d,]+)\s+([\d.,]+)\s+EUR\s+([\d.,]+)\s+EUR`,
+	)
+
+	var txns []*schema.Transaction
+	for _, m := range rowRe.FindAllStringSubmatch(text, -1) {
+		tradeType := "BUY"
+		if strings.ToLower(m[1]) == "verkauf" {
+			tradeType = "SELL"
+		}
+		txns = append(txns, &schema.Transaction{
+			DocumentType:  "SPARPLAN",
+			ISIN:          isin,
+			WKN:           wkn,
+			OrderNumber:   orderNumber,
+			Date:          convertGermanDate(m[2]),
+			Type:          tradeType,
+			Quantity:      mustFloat(m[3]),
+			Price:         mustFloat(m[4]),
+			PriceCurrency: "EUR",
+			GrossValue:    mustFloat(m[5]),
+		})
+	}
+
+	if len(txns) == 0 {
+		return nil, fmt.Errorf("no rows found in Sammelabrechnung table")
+	}
+	return txns, nil
 }
 
 // extractFloat extracts a float from text using a regex pattern.
