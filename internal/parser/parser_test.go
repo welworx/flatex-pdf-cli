@@ -61,9 +61,9 @@ func TestParseTradeBuy(t *testing.T) {
 		DocumentType: "TRADE",
 	}
 
-	tx, err := ParseTrade(doc)
+	tx, err := parseTrade(doc)
 	if err != nil {
-		t.Fatalf("ParseTrade failed: %v", err)
+		t.Fatalf("parseTrade failed: %v", err)
 	}
 
 	// Verify core fields
@@ -108,9 +108,9 @@ func TestParseTradeIdentifiers(t *testing.T) {
 		"Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 31022213999"
 	doc := &extractor.ExtractedDocument{Filename: "trade.pdf", Text: text, DocumentType: "TRADE"}
 
-	tx, err := ParseTrade(doc)
+	tx, err := parseTrade(doc)
 	if err != nil {
-		t.Fatalf("ParseTrade failed: %v", err)
+		t.Fatalf("parseTrade failed: %v", err)
 	}
 	if tx.OrderNumber != "999888777/1" {
 		t.Errorf("OrderNumber = %q, want 999888777/1", tx.OrderNumber)
@@ -143,9 +143,9 @@ func TestParseCrypto(t *testing.T) {
 		"Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 44000000042"
 	doc := &extractor.ExtractedDocument{Filename: "krypto.pdf", Text: text, DocumentType: "CRYPTO"}
 
-	tx, err := ParseCrypto(doc)
+	tx, err := parseCrypto(doc)
 	if err != nil {
-		t.Fatalf("ParseCrypto failed: %v", err)
+		t.Fatalf("parseCrypto failed: %v", err)
 	}
 	checks := []struct {
 		name string
@@ -194,9 +194,9 @@ func TestParseOrderConfirmation(t *testing.T) {
 		"Limit: 59,500 EUR\n"
 	doc := &extractor.ExtractedDocument{Filename: "order.pdf", Text: text, DocumentType: "ORDER"}
 
-	txs, err := ParseOrderConfirmation(doc)
+	txs, err := parseOrderConfirmation(doc)
 	if err != nil {
-		t.Fatalf("ParseOrderConfirmation failed: %v", err)
+		t.Fatalf("parseOrderConfirmation failed: %v", err)
 	}
 	if len(txs) != 2 {
 		t.Fatalf("expected 2 orders, got %d", len(txs))
@@ -227,9 +227,9 @@ func TestParseDividend(t *testing.T) {
 		DocumentType: "DIVIDEND",
 	}
 
-	tx, err := ParseDividend(doc)
+	tx, err := parseDividend(doc)
 	if err != nil {
-		t.Fatalf("ParseDividend failed: %v", err)
+		t.Fatalf("parseDividend failed: %v", err)
 	}
 
 	// Verify core fields
@@ -304,9 +304,9 @@ func TestParseInterest(t *testing.T) {
 		DocumentType: "INTEREST",
 	}
 
-	tx, err := ParseInterest(doc)
+	tx, err := parseInterest(doc)
 	if err != nil {
-		t.Fatalf("ParseInterest failed: %v", err)
+		t.Fatalf("parseInterest failed: %v", err)
 	}
 
 	// Verify core fields
@@ -357,9 +357,9 @@ func TestParseAccumulating(t *testing.T) {
 		DocumentType: "ACCUMULATING",
 	}
 
-	tx, err := ParseAccumulating(doc)
+	tx, err := parseAccumulating(doc)
 	if err != nil {
-		t.Fatalf("ParseAccumulating failed: %v", err)
+		t.Fatalf("parseAccumulating failed: %v", err)
 	}
 
 	// Verify core fields
@@ -453,9 +453,9 @@ func TestParseSparplan(t *testing.T) {
 		DocumentType: "SPARPLAN",
 	}
 
-	txs, err := ParseSparplan(doc)
+	txs, err := parseSparplan(doc)
 	if err != nil {
-		t.Fatalf("ParseSparplan failed: %v", err)
+		t.Fatalf("parseSparplan failed: %v", err)
 	}
 	if len(txs) != 2 {
 		t.Fatalf("expected 2 transactions, got %d", len(txs))
@@ -515,9 +515,9 @@ func TestParseSparplanFromFixture(t *testing.T) {
 		t.Fatalf("ExtractPDF failed: %v", err)
 	}
 
-	txs, err := ParseSparplan(doc)
+	txs, err := parseSparplan(doc)
 	if err != nil {
-		t.Fatalf("ParseSparplan failed: %v", err)
+		t.Fatalf("parseSparplan failed: %v", err)
 	}
 	if len(txs) != 12 {
 		t.Fatalf("expected 12 transactions, got %d", len(txs))
