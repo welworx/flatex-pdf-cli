@@ -26,8 +26,6 @@ type Transaction struct {
 	PriceCurrency   string  `json:"price_currency,omitempty"`
 	GrossValue      float64 `json:"gross_value,omitempty"`
 	Provision       float64 `json:"provision,omitempty"`
-	OwnCosts        float64 `json:"own_costs,omitempty"`
-	ThirdPartyCosts float64 `json:"third_party_costs,omitempty"`
 	WithholdingTax  float64 `json:"withholding_tax,omitempty"`
 	GainLoss        float64 `json:"gain_loss,omitempty"`
 	ExchangeRate    float64 `json:"exchange_rate,omitempty"`
@@ -35,7 +33,6 @@ type Transaction struct {
 	FinalCurrency   string  `json:"final_currency,omitempty"`
 	CustodyType     string  `json:"custody_type,omitempty"`
 	Depositary      string  `json:"depositary,omitempty"`
-	Country         string  `json:"country,omitempty"`
 	ExecutionVenue  string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
 	// ORDER fields (Sammelauftragsbestätigung — pending orders)
