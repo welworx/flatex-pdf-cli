@@ -26,3 +26,7 @@ flatex-pdf-cli-test
 /vendor/
 
 sensitive_test_docs/
+
+# Superpowers (internal development/planning docs)
+.superpowers/
+docs/superpowers/
