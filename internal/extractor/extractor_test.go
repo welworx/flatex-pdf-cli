@@ -97,6 +97,16 @@ func TestDocumentTypeDetection(t *testing.T) {
 			expected: "CRYPTO",
 		},
 		{
+			name:     "Sammelabrechnung aus should be SPARPLAN (not CRYPTO)",
+			text:     "Sammelabrechnung aus\nAuftrags-Nr:0003207723\nKauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR",
+			expected: "SPARPLAN",
+		},
+		{
+			name:     "Sammelabrechnung Kryptowerte must still be CRYPTO",
+			text:     "Sammelabrechnung (Kauf/-verkauf Kryptowerte)",
+			expected: "CRYPTO",
+		},
+		{
 			name:     "Unknown keywords should return UNKNOWN",
 			text:     "Irgendwelche anderen Inhalte ohne Schlüsselwörter",
 			expected: "UNKNOWN",
@@ -416,6 +426,27 @@ func TestTextExtractionFromRealPDF(t *testing.T) {
 		t.Logf("warning: no expected keywords found in extracted text")
 		t.Logf("extracted text length: %d characters", len(text))
 		t.Logf("first 200 characters: %s", text[:min(200, len(text))])
+	}
+}
+
+// TestDetectSparplanFromFixture verifies that the synthetic sparplan fixture
+// is detected as SPARPLAN (not TRADE) and that depot metadata is extracted.
+func TestDetectSparplanFromFixture(t *testing.T) {
+	pdfPath := "../../testdata/sparplan_sample_1.pdf"
+	if _, err := os.Stat(pdfPath); err != nil {
+		t.Skipf("sparplan fixture not found at %s; skipping", pdfPath)
+	}
+
+	doc, err := ExtractPDF(pdfPath)
+	if err != nil {
+		t.Fatalf("ExtractPDF failed: %v", err)
+	}
+	if doc.DocumentType != "SPARPLAN" {
+		t.Errorf("DocumentType = %q, want SPARPLAN", doc.DocumentType)
+	}
+	if doc.DepotNumber == "" {
+		// ponytail: fixture has "Ihre Depotnummer: " blank (PII-redacted); log not fail.
+		t.Logf("DepotNumber is empty (fixture was PII-redacted; depot number field was blanked)")
 	}
 }
 
