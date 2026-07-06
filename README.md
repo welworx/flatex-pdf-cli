@@ -156,7 +156,7 @@ The tool automatically detects and parses the following flatex document types:
 - **ACCUMULATING** — Reinvestment/accumulation notices (Ertragsmitteilung, thesaurierende Fonds)
 - **ORDER** — Order confirmations (Sammelauftragsbestätigung); one record per pending order
 - **CRYPTO** — Crypto buy/sell settlements (Sammelabrechnung Kryptowerte)
-- **SPARPLAN** — Annual Sparplan settlement (Sammelabrechnung aus); one transaction per executed order row
+- **SAVINGSPLAN** — Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row
 
 ## Language Support
 
@@ -182,7 +182,7 @@ Adding English support requires a real English sample to map the English labels.
 | INTEREST | ✅ Full | Zinsen |
 | ACCUMULATING | ✅ Full | Ertragsmitteilung (thesaurierende Fonds) |
 | CRYPTO | ✅ Full | Sammelabrechnung Kryptowerte |
-| SPARPLAN | ✅ Full | Sammelabrechnung aus (annual savings plan settlement) |
+| SAVINGSPLAN | ✅ Full | Sammelabrechnung aus (annual savings plan settlement) |
 | ORDER | 🟡 Partial | Sammelauftragsbestätigung — see limitations below |
 
 ## Known Limitations
@@ -202,7 +202,7 @@ Adding English support requires a real English sample to map the English labels.
   but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
   fixtures only exercise *type detection*, not full field extraction (the parsers
   are verified against real documents instead).
-- **SPARPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
+- **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
 ## Roadmap / TODO
 
