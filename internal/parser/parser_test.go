@@ -437,9 +437,9 @@ func TestExtractFloatGermanNumbers(t *testing.T) {
 	}
 }
 
-// TestParseSparplan tests parsing a Sammelabrechnung aus (annual Sparplan settlement).
+// TestParseSavingsPlan tests parsing a Sammelabrechnung aus (annual savings-plan settlement).
 // The text mirrors gxpdf output: K/V, Buchtag, Valuta, Stücke/Nom., Ausf.-Kurs, Betrag.
-func TestParseSparplan(t *testing.T) {
+func TestParseSavingsPlan(t *testing.T) {
 	text := "Sammelabrechnung aus\n" +
 		"Ihre Depotnummer: 31022213800\n" +
 		"Auftrags-Nr:0003207723\n" +
@@ -448,22 +448,22 @@ func TestParseSparplan(t *testing.T) {
 		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n" +
 		"Verkauf 17.02.2025 19.02.2025 1,436948 138,1400 EUR 198,50 EUR\n"
 	doc := &extractor.ExtractedDocument{
-		Filename:     "sparplan.pdf",
+		Filename:     "savingsplan.pdf",
 		Text:         text,
-		DocumentType: "SPARPLAN",
+		DocumentType: "SAVINGSPLAN",
 	}
 
-	txs, err := parseSparplan(doc)
+	txs, err := parseSavingsPlan(doc)
 	if err != nil {
-		t.Fatalf("parseSparplan failed: %v", err)
+		t.Fatalf("parseSavingsPlan failed: %v", err)
 	}
 	if len(txs) != 2 {
 		t.Fatalf("expected 2 transactions, got %d", len(txs))
 	}
 
 	a := txs[0]
-	if a.DocumentType != "SPARPLAN" {
-		t.Errorf("DocumentType = %q, want SPARPLAN", a.DocumentType)
+	if a.DocumentType != "SAVINGSPLAN" {
+		t.Errorf("DocumentType = %q, want SAVINGSPLAN", a.DocumentType)
 	}
 	if a.ISIN != "IE00B3RBWM25" {
 		t.Errorf("ISIN = %q, want IE00B3RBWM25", a.ISIN)
@@ -502,12 +502,12 @@ func TestParseSparplan(t *testing.T) {
 	}
 }
 
-// TestParseSparplanFromFixture is an integration test that loads the real sparplan
-// fixture PDF, runs ParseSparplan against it, and spot-checks the output.
-func TestParseSparplanFromFixture(t *testing.T) {
+// TestParseSavingsPlanFromFixture is an integration test that loads the real savings-plan
+// fixture PDF, runs parseSavingsPlan against it, and spot-checks the output.
+func TestParseSavingsPlanFromFixture(t *testing.T) {
 	pdfPath := "../../testdata/sparplan_sample_1.pdf"
 	if _, err := os.Stat(pdfPath); err != nil {
-		t.Skipf("sparplan fixture not found at %s; skipping", pdfPath)
+		t.Skipf("savings-plan fixture not found at %s; skipping", pdfPath)
 	}
 
 	doc, err := extractor.ExtractPDF(pdfPath)
@@ -515,17 +515,17 @@ func TestParseSparplanFromFixture(t *testing.T) {
 		t.Fatalf("ExtractPDF failed: %v", err)
 	}
 
-	txs, err := parseSparplan(doc)
+	txs, err := parseSavingsPlan(doc)
 	if err != nil {
-		t.Fatalf("parseSparplan failed: %v", err)
+		t.Fatalf("parseSavingsPlan failed: %v", err)
 	}
 	if len(txs) != 12 {
 		t.Fatalf("expected 12 transactions, got %d", len(txs))
 	}
 
 	row0 := txs[0]
-	if row0.DocumentType != "SPARPLAN" {
-		t.Errorf("DocumentType = %q, want SPARPLAN", row0.DocumentType)
+	if row0.DocumentType != "SAVINGSPLAN" {
+		t.Errorf("DocumentType = %q, want SAVINGSPLAN", row0.DocumentType)
 	}
 	if row0.Type != "BUY" {
 		t.Errorf("Type = %q, want BUY", row0.Type)
@@ -535,17 +535,17 @@ func TestParseSparplanFromFixture(t *testing.T) {
 	}
 }
 
-// TestParseSparplanRouting verifies Parse() routes SPARPLAN documents correctly.
-func TestParseSparplanRouting(t *testing.T) {
+// TestParseSavingsPlanRouting verifies Parse() routes SAVINGSPLAN documents correctly.
+func TestParseSavingsPlanRouting(t *testing.T) {
 	text := "Sammelabrechnung aus\n" +
 		"Auftrags-Nr:0003207723\n" +
 		"ISIN: IE00B3RBWM25\n" +
 		"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" +
 		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n"
 	doc := &extractor.ExtractedDocument{
-		Filename:     "sparplan.pdf",
+		Filename:     "savingsplan.pdf",
 		Text:         text,
-		DocumentType: "SPARPLAN",
+		DocumentType: "SAVINGSPLAN",
 	}
 
 	txs, err := Parse(doc)

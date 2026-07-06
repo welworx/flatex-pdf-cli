@@ -97,9 +97,9 @@ func TestDocumentTypeDetection(t *testing.T) {
 			expected: "CRYPTO",
 		},
 		{
-			name:     "Sammelabrechnung aus should be SPARPLAN (not CRYPTO)",
+			name:     "Sammelabrechnung aus should be SAVINGSPLAN (not CRYPTO)",
 			text:     "Sammelabrechnung aus\nAuftrags-Nr:0003207723\nKauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR",
-			expected: "SPARPLAN",
+			expected: "SAVINGSPLAN",
 		},
 		{
 			name:     "Sammelabrechnung Kryptowerte must still be CRYPTO",
@@ -429,20 +429,20 @@ func TestTextExtractionFromRealPDF(t *testing.T) {
 	}
 }
 
-// TestDetectSparplanFromFixture verifies that the synthetic sparplan fixture
-// is detected as SPARPLAN (not TRADE).
-func TestDetectSparplanFromFixture(t *testing.T) {
+// TestDetectSavingsPlanFromFixture verifies that the synthetic savings-plan
+// fixture is detected as SAVINGSPLAN (not TRADE).
+func TestDetectSavingsPlanFromFixture(t *testing.T) {
 	pdfPath := "../../testdata/sparplan_sample_1.pdf"
 	if _, err := os.Stat(pdfPath); err != nil {
-		t.Skipf("sparplan fixture not found at %s; skipping", pdfPath)
+		t.Skipf("savings-plan fixture not found at %s; skipping", pdfPath)
 	}
 
 	doc, err := ExtractPDF(pdfPath)
 	if err != nil {
 		t.Fatalf("ExtractPDF failed: %v", err)
 	}
-	if doc.DocumentType != "SPARPLAN" {
-		t.Errorf("DocumentType = %q, want SPARPLAN", doc.DocumentType)
+	if doc.DocumentType != "SAVINGSPLAN" {
+		t.Errorf("DocumentType = %q, want SAVINGSPLAN", doc.DocumentType)
 	}
 	if doc.DepotNumber == "" {
 		// ponytail: fixture has "Ihre Depotnummer: " blank (PII-redacted); log not fail.
