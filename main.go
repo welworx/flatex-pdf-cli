@@ -21,6 +21,7 @@ var version = ""
 func main() {
 	outputFile := flag.String("o", "", "output file (stdout if not provided)")
 	format := flag.String("format", "json", "output format: json, csv, or pp (Portfolio Performance)")
+	lang := flag.String("lang", "en", "language for -format pp headers/labels: en or de")
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
@@ -69,7 +70,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := writeOutput(*format, *outputFile, transactions, metadata, *includeMetadata); err != nil {
+	if err := writeOutput(*format, *outputFile, *lang, transactions, metadata, *includeMetadata); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
 		os.Exit(1)
 	}
@@ -82,7 +83,7 @@ func main() {
 // because Portfolio Performance's CSV import handles those as two separate
 // wizards; it therefore requires outFile so the two derived filenames are
 // deterministic.
-func writeOutput(format, outFile string, transactions []*schema.Transaction, metadata *schema.DocumentMetadata, includeMetadata bool) error {
+func writeOutput(format, outFile, lang string, transactions []*schema.Transaction, metadata *schema.DocumentMetadata, includeMetadata bool) error {
 	switch format {
 	case "json":
 		return writeTo(outFile, func(w io.Writer) error {
@@ -107,12 +108,12 @@ func writeOutput(format, outFile string, transactions []*schema.Transaction, met
 		}
 		base := strings.TrimSuffix(outFile, ".csv")
 		if err := writeTo(base+"-portfolio.csv", func(w io.Writer) error {
-			return export.WritePortfolioTransactions(w, transactions)
+			return export.WritePortfolioTransactions(w, transactions, lang)
 		}); err != nil {
 			return err
 		}
 		return writeTo(base+"-accounts.csv", func(w io.Writer) error {
-			return export.WriteAccountTransactions(w, transactions)
+			return export.WriteAccountTransactions(w, transactions, lang)
 		})
 	default:
 		return fmt.Errorf("unknown format %q (want json, csv, or pp)", format)
@@ -208,6 +209,7 @@ Process PDF files from flatex and extract transaction data.
 Options:
   -o FILE              output file (stdout if not provided; for -format pp, base name for the two output files)
   -format FORMAT       output format: json (default), csv, or pp (Portfolio Performance)
+  -lang LANG           language for -format pp headers/labels: en (default) or de
   -include-source      add source filename to each transaction
   -include-metadata    wrap output with depot metadata (json format only)
   -quiet               hide skipped/problematic files; emit only valid JSON

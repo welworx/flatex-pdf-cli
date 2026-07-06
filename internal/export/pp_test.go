@@ -16,7 +16,7 @@ func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WritePortfolioTransactions(&buf, txns); err != nil {
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
 		t.Fatalf("WritePortfolioTransactions failed: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WritePortfolioTransactions(&buf, txns); err != nil {
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
 		t.Fatalf("WritePortfolioTransactions failed: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestWriteAccountTransactionsMapsTypes(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WriteAccountTransactions(&buf, txns); err != nil {
+	if err := WriteAccountTransactions(&buf, txns, "en"); err != nil {
 		t.Fatalf("WriteAccountTransactions failed: %v", err)
 	}
 
@@ -79,7 +79,65 @@ func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15", Type: "SPLIT"}}
 
 	var buf bytes.Buffer
-	if err := WritePortfolioTransactions(&buf, txns); err == nil {
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err == nil {
 		t.Fatal("expected error for unknown trade type, got nil")
+	}
+}
+
+func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Provision: 5},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Provision: 5},
+	}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "de"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if !strings.HasPrefix(lines[0], "Datum,Typ,Wert,Stück,ISIN,WKN,Wertpapiername") {
+		t.Errorf("unexpected German header: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "Kauf") {
+		t.Errorf("expected Kauf row, got: %s", lines[1])
+	}
+	if !strings.Contains(lines[2], "Verkauf") {
+		t.Errorf("expected Verkauf row, got: %s", lines[2])
+	}
+}
+
+func TestWriteAccountTransactionsGermanLang(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
+		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: 2},
+		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: 3},
+	}
+
+	var buf bytes.Buffer
+	if err := WriteAccountTransactions(&buf, txns, "de"); err != nil {
+		t.Fatalf("WriteAccountTransactions failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if !strings.HasPrefix(lines[0], "Datum,Typ,Wert,ISIN,WKN,Wertpapiername,Steuern,Gebühren,Notiz") {
+		t.Errorf("unexpected German header: %s", lines[0])
+	}
+	if !strings.Contains(lines[1], "Dividende") {
+		t.Errorf("expected Dividende row, got: %s", lines[1])
+	}
+	if !strings.Contains(lines[2], "Zinsen") {
+		t.Errorf("expected Zinsen row, got: %s", lines[2])
+	}
+	if !strings.Contains(lines[3], "Steuern") {
+		t.Errorf("expected Steuern row, got: %s", lines[3])
+	}
+}
+
+func TestWritePortfolioTransactionsUnknownLang(t *testing.T) {
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15", Type: "BUY"}}
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "fr"); err == nil {
+		t.Fatal("expected error for unknown lang, got nil")
 	}
 }
