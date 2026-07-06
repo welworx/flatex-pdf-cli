@@ -10,23 +10,42 @@ import (
 
 // Column names match Portfolio Performance's documented CSV import fields
 // (https://help.portfolio-performance.info/en/reference/file/import/csv-import/).
-// PP's CSV import is column-mapping based, not fixed-header — using its
-// documented names just helps the import wizard auto-recognize columns.
-var portfolioHeader = []string{
-	"Date", "Type", "Value", "Shares", "ISIN", "WKN", "Security Name",
-	"Fees", "Taxes", "Currency Gross Amount", "Exchange Rate", "Note",
+// German headers/labels are sourced from PP's own German locale resource
+// files (messages_de.properties, labels_de.properties) — PP's CSV column
+// auto-recognition is locale-sensitive with no English fallback, so a
+// German-locale PP install needs German headers and German Type values to
+// auto-map columns at all.
+var portfolioHeader = map[string][]string{
+	"en": {"Date", "Type", "Value", "Shares", "ISIN", "WKN", "Security Name", "Fees", "Taxes", "Currency Gross Amount", "Exchange Rate", "Note"},
+	"de": {"Datum", "Typ", "Wert", "Stück", "ISIN", "WKN", "Wertpapiername", "Gebühren", "Steuern", "Währung Bruttobetrag", "Wechselkurs", "Notiz"},
 }
 
-var accountHeader = []string{
-	"Date", "Type", "Value", "ISIN", "WKN", "Security Name", "Taxes", "Fees", "Note",
+var accountHeader = map[string][]string{
+	"en": {"Date", "Type", "Value", "ISIN", "WKN", "Security Name", "Taxes", "Fees", "Note"},
+	"de": {"Datum", "Typ", "Wert", "ISIN", "WKN", "Wertpapiername", "Steuern", "Gebühren", "Notiz"},
+}
+
+var tradeTypeLabel = map[string]map[string]string{
+	"en": {"BUY": "Buy", "SELL": "Sell"},
+	"de": {"BUY": "Kauf", "SELL": "Verkauf"},
+}
+
+var accountTypeLabel = map[string]map[string]string{
+	"en": {"DIVIDEND": "Dividend", "INTEREST": "Interest", "TAXES": "Taxes"},
+	"de": {"DIVIDEND": "Dividende", "INTEREST": "Zinsen", "TAXES": "Steuern"},
 }
 
 // WritePortfolioTransactions writes the buy/sell CSV for PP's "Portfolio
 // Transactions" import (TRADE, CRYPTO, SAVINGSPLAN document types). Pending
 // ORDER confirmations are skipped — they have no executed Value/Shares yet.
-func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction) error {
+// lang selects the header row and Type vocabulary: "en" or "de".
+func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang string) error {
+	header, ok := portfolioHeader[lang]
+	if !ok {
+		return fmt.Errorf("unknown lang %q (want en or de)", lang)
+	}
 	cw := csv.NewWriter(w)
-	if err := cw.Write(portfolioHeader); err != nil {
+	if err := cw.Write(header); err != nil {
 		return err
 	}
 	for _, t := range txns {
@@ -35,7 +54,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction) error {
 		default:
 			continue
 		}
-		ppType, err := ppTradeType(t.Type)
+		ppType, err := ppTradeType(lang, t.Type)
 		if err != nil {
 			return fmt.Errorf("%s %s: %w", t.DocumentType, t.Date, err)
 		}
@@ -75,25 +94,32 @@ func portfolioValue(t *schema.Transaction) float64 {
 	return t.GrossValue + t.Provision
 }
 
-func ppTradeType(tradeType string) (string, error) {
-	switch tradeType {
-	case "BUY":
-		return "Buy", nil
-	case "SELL":
-		return "Sell", nil
-	default:
+func ppTradeType(lang, tradeType string) (string, error) {
+	labels, ok := tradeTypeLabel[lang]
+	if !ok {
+		return "", fmt.Errorf("unknown lang %q (want en or de)", lang)
+	}
+	label, ok := labels[tradeType]
+	if !ok {
 		return "", fmt.Errorf("unknown trade type %q", tradeType)
 	}
+	return label, nil
 }
 
 // WriteAccountTransactions writes the cash-account CSV for PP's "Account
 // Transactions" import (DIVIDEND, INTEREST, ACCUMULATING document types).
 // ACCUMULATING entries with no withheld tax are skipped — flatex's
 // Vorabpauschale notice is a phantom accrual with no real cash movement
-// unless tax was actually withheld.
-func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction) error {
+// unless tax was actually withheld. lang selects the header row and Type
+// vocabulary: "en" or "de".
+func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang string) error {
+	header, ok := accountHeader[lang]
+	if !ok {
+		return fmt.Errorf("unknown lang %q (want en or de)", lang)
+	}
+	labels := accountTypeLabel[lang]
 	cw := csv.NewWriter(w)
-	if err := cw.Write(accountHeader); err != nil {
+	if err := cw.Write(header); err != nil {
 		return err
 	}
 	for _, t := range txns {
@@ -101,14 +127,14 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction) error {
 		var value float64
 		switch t.DocumentType {
 		case "DIVIDEND":
-			ppType, value = "Dividend", t.NetAmount
+			ppType, value = labels["DIVIDEND"], t.NetAmount
 		case "INTEREST":
-			ppType, value = "Interest", t.NetAmount
+			ppType, value = labels["INTEREST"], t.NetAmount
 		case "ACCUMULATING":
 			if t.WithholdingTax == 0 {
 				continue
 			}
-			ppType, value = "Taxes", t.WithholdingTax
+			ppType, value = labels["TAXES"], t.WithholdingTax
 		default:
 			continue
 		}
