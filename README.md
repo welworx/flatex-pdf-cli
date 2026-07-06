@@ -85,6 +85,23 @@ Combine flags:
 ./flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
+## Export Formats
+
+By default the CLI emits JSON. Use `-format` to emit CSV instead:
+
+- `-format csv` — one row per transaction, every parsed field as a column. Good for spreadsheets or your own scripts.
+- `-format pp` — two CSVs shaped for [Portfolio Performance](https://www.portfolio-performance.info/)'s CSV import: `<base>-portfolio.csv` (buy/sell trades) and `<base>-accounts.csv` (dividends, interest, withheld tax on accumulating funds). Requires `-o <base>` since two files are written.
+
+```bash
+flatex-pdf-cli -format csv -o transactions.csv ~/Downloads/flatex
+flatex-pdf-cli -format pp -o portfolio ~/Downloads/flatex
+# writes portfolio-portfolio.csv and portfolio-accounts.csv
+```
+
+Then in Portfolio Performance: **File > Import > CSV Files**, pick the "Portfolio Transactions" or "Account Transactions" import, and use the matching CSV. PP's CSV import lets you re-map any column, so if a column isn't auto-recognized, map it by hand — after the first import, save the mapping as a template so later imports are one click.
+
+**Before bulk-importing, test-import a handful of rows first** and check the resulting positions/cash balance against a statement you trust. The column mapping above is our best-effort read of PP's documented CSV fields; it hasn't been validated against every edge case (e.g. multi-currency trades, partial fills).
+
 ## Organize Downloads
 
 Automatically sort flatex PDFs from your Downloads folder into a structured archive.
