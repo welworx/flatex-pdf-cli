@@ -100,7 +100,7 @@ flatex-pdf-cli -format pp -o portfolio ~/Downloads/flatex
 
 Then in Portfolio Performance: **File > Import > CSV Files**, pick the "Portfolio Transactions" or "Account Transactions" import, and use the matching CSV. PP's CSV import lets you re-map any column, so if a column isn't auto-recognized, map it by hand — after the first import, save the mapping as a template so later imports are one click.
 
-**Running PP in German?** Add `-lang de` to get German column headers (`Datum`, `Wert`, `Stück`, …) and German `Typ` values (`Kauf`, `Verkauf`, `Dividende`, `Zinsen`, `Steuern`). PP's CSV column auto-recognition is locale-sensitive with no English fallback, so a German-locale PP install won't auto-map English headers at all — `-lang de` is what makes auto-recognition work without manually mapping every column.
+**Running PP in German?** Add `-lang de` to get German column headers (`Datum`, `Wert`, `Stück`, …), German `Typ` values (`Kauf`, `Verkauf`, `Dividende`, `Zinsen`, `Steuern`), and a semicolon (`;`) field separator instead of comma — the German-locale convention, since `,` is the German decimal separator, and what PP's own import wizard defaults its delimiter picker to. PP's CSV column auto-recognition is locale-sensitive with no English fallback, so a German-locale PP install won't auto-map English headers at all — `-lang de` is what makes auto-recognition work without manually mapping every column.
 
 ```bash
 flatex-pdf-cli -format pp -lang de -o portfolio ~/Downloads/flatex

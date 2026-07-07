@@ -96,7 +96,7 @@ func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if lines[0] != "Datum,Typ,Wert,Stück,ISIN,WKN,Wertpapiername,Gebühren,Steuern,Währung Bruttobetrag,Wechselkurs,Notiz" {
+	if lines[0] != "Datum;Typ;Wert;Stück;ISIN;WKN;Wertpapiername;Gebühren;Steuern;Währung Bruttobetrag;Wechselkurs;Notiz" {
 		t.Errorf("unexpected German header: %s", lines[0])
 	}
 	if !strings.Contains(lines[1], "Kauf") {
@@ -104,6 +104,34 @@ func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	}
 	if !strings.Contains(lines[2], "Verkauf") {
 		t.Errorf("expected Verkauf row, got: %s", lines[2])
+	}
+}
+
+func TestWritePortfolioTransactionsGermanUsesSemicolonDelimiter(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
+	}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "de"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+	if strings.Contains(buf.String(), ",") {
+		t.Errorf("expected no commas in German-locale output (semicolon-delimited), got: %s", buf.String())
+	}
+}
+
+func TestWritePortfolioTransactionsEnglishUsesCommaDelimiter(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
+	}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), ",") {
+		t.Errorf("expected comma-delimited English output, got: %s", buf.String())
 	}
 }
 
@@ -120,7 +148,7 @@ func TestWriteAccountTransactionsGermanLang(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if !strings.HasPrefix(lines[0], "Datum,Typ,Wert,ISIN,WKN,Wertpapiername,Steuern,Gebühren,Notiz") {
+	if !strings.HasPrefix(lines[0], "Datum;Typ;Wert;ISIN;WKN;Wertpapiername;Steuern;Gebühren;Notiz") {
 		t.Errorf("unexpected German header: %s", lines[0])
 	}
 	if !strings.Contains(lines[1], "Dividende") {
