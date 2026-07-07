@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
@@ -69,15 +70,15 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 		row := []string{
 			t.Date,
 			ppType,
-			formatFloat(portfolioValue(t)),
-			formatFloat(t.Quantity),
+			formatAmount(portfolioValue(t), lang),
+			formatAmount(t.Quantity, lang),
 			t.ISIN,
 			t.WKN,
 			t.SecurityName,
-			formatFloat(t.Provision),
-			formatFloat(t.WithholdingTax),
+			formatAmount(t.Provision, lang),
+			formatAmount(t.WithholdingTax, lang),
 			t.PriceCurrency,
-			formatFloat(t.ExchangeRate),
+			formatAmount(t.ExchangeRate, lang),
 			note(t),
 		}
 		if err := cw.Write(row); err != nil {
@@ -148,8 +149,8 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 			continue
 		}
 		row := []string{
-			t.Date, ppType, formatFloat(value), t.ISIN, t.WKN, t.SecurityName,
-			formatFloat(t.WithholdingTax), "0", note(t),
+			t.Date, ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
+			formatAmount(t.WithholdingTax, lang), "0", note(t),
 		}
 		if err := cw.Write(row); err != nil {
 			return err
@@ -168,6 +169,20 @@ func csvDelimiter(lang string) rune {
 		return ';'
 	}
 	return ','
+}
+
+// formatAmount renders f for lang. PP's per-column numeric-format picker
+// defaults to comma-decimal exactly when the OS locale's own decimal
+// separator is comma — the same condition that makes German headers
+// necessary — so German output swaps the period from formatFloat for a
+// comma; PP's parser accepts a bare digit string with no thousands
+// separator, so no grouping is added.
+func formatAmount(f float64, lang string) string {
+	s := formatFloat(f)
+	if lang == "de" {
+		s = strings.Replace(s, ".", ",", 1)
+	}
+	return s
 }
 
 func note(t *schema.Transaction) string {

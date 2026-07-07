@@ -121,6 +121,24 @@ func TestWritePortfolioTransactionsGermanUsesSemicolonDelimiter(t *testing.T) {
 	}
 }
 
+func TestWritePortfolioTransactionsGermanUsesCommaDecimalSeparator(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "SAVINGSPLAN", ISIN: "IE00B3RBWM25", Date: "2025-01-15", Type: "BUY", Quantity: 1.478695, Price: 134.24, GrossValue: 200.00},
+	}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "de"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+
+	if strings.Contains(buf.String(), ".") {
+		t.Errorf("expected no periods in German-locale output (comma-decimal), got: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "1,478695") {
+		t.Errorf("expected Shares column as comma-decimal 1,478695, got: %s", buf.String())
+	}
+}
+
 func TestWritePortfolioTransactionsEnglishUsesCommaDelimiter(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
