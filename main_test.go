@@ -73,6 +73,23 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 	}
 }
 
+func TestWriteOutputPPFormatRejectsUnknownLangWithoutWritingFiles(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.csv")
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+
+	if err := writeOutput("pp", out, "fr", txns, nil, false); err == nil {
+		t.Fatal("expected error for unknown lang")
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "out-portfolio.csv")); !os.IsNotExist(err) {
+		t.Errorf("expected out-portfolio.csv to not be created, stat err: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "out-accounts.csv")); !os.IsNotExist(err) {
+		t.Errorf("expected out-accounts.csv to not be created, stat err: %v", err)
+	}
+}
+
 func TestWriteOutputUnknownFormat(t *testing.T) {
 	if err := writeOutput("xlsx", "", "en", nil, nil, false); err == nil {
 		t.Fatal("expected error for unknown format")

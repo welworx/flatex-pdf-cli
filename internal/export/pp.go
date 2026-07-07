@@ -20,6 +20,13 @@ var portfolioHeader = map[string][]string{
 	"de": {"Datum", "Typ", "Wert", "Stück", "ISIN", "WKN", "Wertpapiername", "Gebühren", "Steuern", "Währung Bruttobetrag", "Wechselkurs", "Notiz"},
 }
 
+// ValidLang reports whether lang is a supported -lang value for the pp
+// export functions ("en" or "de").
+func ValidLang(lang string) bool {
+	_, ok := portfolioHeader[lang]
+	return ok
+}
+
 var accountHeader = map[string][]string{
 	"en": {"Date", "Type", "Value", "ISIN", "WKN", "Security Name", "Taxes", "Fees", "Note"},
 	"de": {"Datum", "Typ", "Wert", "ISIN", "WKN", "Wertpapiername", "Steuern", "Gebühren", "Notiz"},

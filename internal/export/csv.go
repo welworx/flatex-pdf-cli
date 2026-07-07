@@ -1,4 +1,3 @@
-// internal/export/csv.go
 package export
 
 import (
