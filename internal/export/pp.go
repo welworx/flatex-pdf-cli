@@ -52,6 +52,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 		return fmt.Errorf("unknown lang %q (want en or de)", lang)
 	}
 	cw := csv.NewWriter(w)
+	cw.Comma = csvDelimiter(lang)
 	if err := cw.Write(header); err != nil {
 		return err
 	}
@@ -126,6 +127,7 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 	}
 	labels := accountTypeLabel[lang]
 	cw := csv.NewWriter(w)
+	cw.Comma = csvDelimiter(lang)
 	if err := cw.Write(header); err != nil {
 		return err
 	}
@@ -155,6 +157,17 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// csvDelimiter returns the field separator conventional for lang: German
+// locale CSV uses semicolon, since comma is the German decimal separator —
+// PP's own CSV import wizard defaults its delimiter picker to semicolon for
+// this reason, so matching it removes a manual step for German-locale users.
+func csvDelimiter(lang string) rune {
+	if lang == "de" {
+		return ';'
+	}
+	return ','
 }
 
 func note(t *schema.Transaction) string {
