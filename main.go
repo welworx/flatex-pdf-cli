@@ -106,6 +106,9 @@ func writeOutput(format, outFile, lang string, transactions []*schema.Transactio
 		if outFile == "" {
 			return fmt.Errorf("-format pp requires -o (writes <base>-portfolio.csv and <base>-accounts.csv)")
 		}
+		if !export.ValidLang(lang) {
+			return fmt.Errorf("unknown lang %q (want en or de)", lang)
+		}
 		base := strings.TrimSuffix(outFile, ".csv")
 		if err := writeTo(base+"-portfolio.csv", func(w io.Writer) error {
 			return export.WritePortfolioTransactions(w, transactions, lang)

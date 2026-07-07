@@ -96,7 +96,7 @@ func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if !strings.HasPrefix(lines[0], "Datum,Typ,Wert,Stück,ISIN,WKN,Wertpapiername") {
+	if lines[0] != "Datum,Typ,Wert,Stück,ISIN,WKN,Wertpapiername,Gebühren,Steuern,Währung Bruttobetrag,Wechselkurs,Notiz" {
 		t.Errorf("unexpected German header: %s", lines[0])
 	}
 	if !strings.Contains(lines[1], "Kauf") {
