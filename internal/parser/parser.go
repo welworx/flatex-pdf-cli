@@ -27,8 +27,8 @@ func Parse(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 		return one(parseCrypto(doc))
 	case "ORDER":
 		return parseOrderConfirmation(doc)
-	case "SPARPLAN":
-		return parseSparplan(doc)
+	case "SAVINGSPLAN":
+		return parseSavingsPlan(doc)
 	default:
 		return nil, fmt.Errorf("unknown document type: %s", doc.DocumentType)
 	}
@@ -553,10 +553,11 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	return transaction, nil
 }
 
-// parseSparplan parses a "Sammelabrechnung aus" — an annual Sparplan settlement
-// that lists each executed order as a table row. Returns one Transaction per row;
-// ISIN and order number are shared across all rows.
-func parseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+// parseSavingsPlan parses a "Sammelabrechnung aus" — an annual savings-plan
+// (Sparplan) settlement that lists each executed order as a table row.
+// Returns one Transaction per row; ISIN and order number are shared across
+// all rows.
+func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	text := doc.Text
 
 	isin := extractISIN(text)
@@ -580,7 +581,7 @@ func parseSparplan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, err
 			tradeType = "SELL"
 		}
 		txns = append(txns, &schema.Transaction{
-			DocumentType:  "SPARPLAN",
+			DocumentType:  "SAVINGSPLAN",
 			ISIN:          isin,
 			WKN:           wkn,
 			OrderNumber:   orderNumber,

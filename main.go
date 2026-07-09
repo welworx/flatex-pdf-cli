@@ -1,14 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/welworx/flatex-pdf-cli/internal/export"
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
 	"github.com/welworx/flatex-pdf-cli/internal/parser"
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
@@ -18,8 +20,10 @@ var version = ""
 
 func main() {
 	outputFile := flag.String("o", "", "output file (stdout if not provided)")
+	format := flag.String("format", "json", "output format: json, csv, or pp (Portfolio Performance)")
+	lang := flag.String("lang", "en", "language for -format pp headers/labels: en or de")
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
-	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata")
+	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
 	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
@@ -66,40 +70,71 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Format output
-	var output interface{}
-	if *includeMetadata {
-		output = &schema.Output{
-			Metadata:     metadata,
-			Transactions: transactions,
-		}
-	} else {
-		output = transactions
-	}
-
-	// Marshal to JSON (SetEscapeHTML false so & stays & not &)
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(output); err != nil {
-		fmt.Fprintf(os.Stderr, "error marshaling JSON: %v\n", err)
+	if err := writeOutput(*format, *outputFile, *lang, transactions, metadata, *includeMetadata); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
 		os.Exit(1)
-	}
-	jsonData := buf.Bytes()
-
-	// Write to file or stdout
-	if *outputFile != "" {
-		err := os.WriteFile(*outputFile, jsonData, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error writing to file: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		os.Stdout.Write(jsonData)
 	}
 
 	os.Exit(0)
+}
+
+// writeOutput dispatches to the requested format. "pp" always writes two
+// files (a Portfolio Transactions CSV and an Account Transactions CSV)
+// because Portfolio Performance's CSV import handles those as two separate
+// wizards; it therefore requires outFile so the two derived filenames are
+// deterministic.
+func writeOutput(format, outFile, lang string, transactions []*schema.Transaction, metadata *schema.DocumentMetadata, includeMetadata bool) error {
+	switch format {
+	case "json":
+		return writeTo(outFile, func(w io.Writer) error {
+			var output interface{}
+			if includeMetadata {
+				output = &schema.Output{Metadata: metadata, Transactions: transactions}
+			} else {
+				output = transactions
+			}
+			enc := json.NewEncoder(w)
+			enc.SetIndent("", "  ")
+			enc.SetEscapeHTML(false)
+			return enc.Encode(output)
+		})
+	case "csv":
+		return writeTo(outFile, func(w io.Writer) error {
+			return export.WriteCSV(w, transactions)
+		})
+	case "pp":
+		if outFile == "" {
+			return fmt.Errorf("-format pp requires -o (writes <base>-portfolio.csv and <base>-accounts.csv)")
+		}
+		if !export.ValidLang(lang) {
+			return fmt.Errorf("unknown lang %q (want en or de)", lang)
+		}
+		base := strings.TrimSuffix(outFile, ".csv")
+		if err := writeTo(base+"-portfolio.csv", func(w io.Writer) error {
+			return export.WritePortfolioTransactions(w, transactions, lang)
+		}); err != nil {
+			return err
+		}
+		return writeTo(base+"-accounts.csv", func(w io.Writer) error {
+			return export.WriteAccountTransactions(w, transactions, lang)
+		})
+	default:
+		return fmt.Errorf("unknown format %q (want json, csv, or pp)", format)
+	}
+}
+
+// writeTo runs fn against stdout, or against a newly created file at path
+// when path is non-empty.
+func writeTo(path string, fn func(io.Writer) error) error {
+	if path == "" {
+		return fn(os.Stdout)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return fn(f)
 }
 
 // processPDFs parses each PDF, skipping (and reporting) any that fail so one
@@ -175,9 +210,11 @@ func printUsage() {
 Process PDF files from flatex and extract transaction data.
 
 Options:
-  -o FILE              output file (stdout if not provided)
+  -o FILE              output file (stdout if not provided; for -format pp, base name for the two output files)
+  -format FORMAT       output format: json (default), csv, or pp (Portfolio Performance)
+  -lang LANG           language for -format pp headers/labels: en (default) or de
   -include-source      add source filename to each transaction
-  -include-metadata    wrap output with depot metadata
+  -include-metadata    wrap output with depot metadata (json format only)
   -quiet               hide skipped/problematic files; emit only valid JSON
   -version             show version and exit
 
@@ -185,4 +222,3 @@ Arguments:
   <path>               path to PDF file or directory containing PDFs
 `, os.Args[0])
 }
-

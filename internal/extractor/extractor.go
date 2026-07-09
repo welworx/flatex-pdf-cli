@@ -128,9 +128,9 @@ func detectDocumentType(text string) string {
 	if strings.Contains(lowerText, "sammelabrechnung") && strings.Contains(lowerText, "kryptowerte") {
 		return "CRYPTO"
 	}
-	// SPARPLAN must precede TRADE (rows contain "Kauf"/"Verkauf")
+	// SAVINGSPLAN must precede TRADE (rows contain "Kauf"/"Verkauf")
 	if strings.Contains(lowerText, "sammelabrechnung") && !strings.Contains(lowerText, "kryptowerte") {
-		return "SPARPLAN"
+		return "SAVINGSPLAN"
 	}
 	if strings.Contains(lowerText, "sammelauftragsbestätigung") {
 		return "ORDER"

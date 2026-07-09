@@ -23,7 +23,7 @@ To regenerate or add fixtures, point the skill at a document in
 | `dividend_sample_1.pdf`, `dividend_sample_2.pdf` | Ertragsmitteilung / Ausschüttung | `DIVIDEND` |
 | `orderbestaetigung_sample_1.pdf` | Sammelauftragsbestätigung (order confirmation) | `ORDER` |
 | `krypto_sample_1.pdf` | Sammelabrechnung Kryptowerte (crypto settlement) | `CRYPTO` |
-| `sparplan_sample_1.pdf` | Sammelabrechnung aus (annual Sparplan settlement) | `SPARPLAN` |
+| `sparplan_sample_1.pdf` | Sammelabrechnung aus (annual savings-plan settlement) | `SAVINGSPLAN` |
 
 These also exercise the skip-and-continue behaviour and serve as PII-free
 samples of each layout for regression tests.
@@ -35,7 +35,7 @@ The extractor identifies types by German keywords, checked in this order
 
 - **CRYPTO**: "Sammelabrechnung" + "Kryptowerte"
 - **ORDER**: "Sammelauftragsbestätigung"
-- **SPARPLAN**: "Sammelabrechnung" (without "Kryptowerte")
+- **SAVINGSPLAN**: "Sammelabrechnung" (without "Kryptowerte")
 - **TRADE**: "Kauf" / "Verkauf"
 - **DIVIDEND**: "Ausschüttung"
 - **INTEREST**: "Zinsen"
