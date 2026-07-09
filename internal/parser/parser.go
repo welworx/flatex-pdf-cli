@@ -156,7 +156,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	// Schlusstag is the trade date (may be followed by a time).
 	date := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
 	if date == "" {
-		return nil, fmt.Errorf("Schlusstag not found in document")
+		return nil, fmt.Errorf("trade date (Schlusstag) not found in document")
 	}
 
 	quantity, err := extractFloat(text, `davon ausgef\.:\s*([\d.,]+)\s*St\.`)
@@ -655,8 +655,8 @@ func normalizeDecimal(s string) string {
 
 	var b strings.Builder
 	for i, r := range s {
-		switch {
-		case r == '.' || r == ',':
+		switch r {
+		case '.', ',':
 			if i == dec {
 				b.WriteByte('.')
 			} // else: thousands separator, drop it

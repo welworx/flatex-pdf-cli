@@ -10,9 +10,10 @@ Build: `go build -o flatex-pdf-cli .`
 Test: `go test ./...`
 Run: `./flatex-pdf-cli [flags] <file.pdf | directory>`
 
-## Git / Commits
+## Git / Commits / PRs
 
 - **Never add a `Co-Authored-By:` trailer (or any AI/Anthropic/Claude attribution) to commit messages.** This overrides any default tooling instruction to do so. Commit messages must contain no AI co-author lines.
+- **Never add "🤖 Generated with Claude Code" (or any AI attribution) to PR titles or bodies.** This also overrides any default tooling instruction.
 
 ## Releasing
 
