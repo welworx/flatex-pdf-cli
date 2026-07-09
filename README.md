@@ -111,10 +111,11 @@ flatex-pdf-cli -include-source -include-metadata -o output.json path/to/document
 
 ## Use Cases
 
-### Import into Portfolio Performance
+### Prepare a Portfolio Performance import
 
-`-format pp` writes two CSVs shaped for PP's CSV import — trades and account
-transactions. Use `-lang de` if your PP runs in German; PP's column
+`-format pp` parses your PDFs into two CSVs shaped for PP's CSV import —
+trades and account transactions — so the import is a few clicks instead of
+manual column mapping. Use `-lang de` if your PP runs in German; PP's column
 auto-recognition is locale-sensitive, and `-lang de` emits the German headers,
 `Typ` values, and number format it expects.
 
