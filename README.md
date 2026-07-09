@@ -180,13 +180,15 @@ Non-flatex PDFs in the source directory are silently skipped.
 
 The tool automatically detects and parses the following flatex document types:
 
-- **TRADE** — Buy/sell confirmations (Wertpapierabrechnung) with pricing, costs, and gain/loss information
-- **DIVIDEND** — Dividend payment statements with distribution details and withholding tax
-- **INTEREST** — Interest payment notices on cash accounts
-- **ACCUMULATING** — Reinvestment/accumulation notices (Ertragsmitteilung, thesaurierende Fonds)
-- **ORDER** — Order confirmations (Sammelauftragsbestätigung); one record per pending order
-- **CRYPTO** — Crypto buy/sell settlements (Sammelabrechnung Kryptowerte)
-- **SAVINGSPLAN** — Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row
+| Type | Status | Description |
+|---|---|---|
+| TRADE | ✅ Full | Buy/sell confirmations (Wertpapierabrechnung Kauf/Verkauf) with pricing, costs, and gain/loss |
+| DIVIDEND | ✅ Full | Dividend payment statements (Ausschüttung) with distribution details and withholding tax |
+| INTEREST | ✅ Full | Interest payment notices (Zinsen) on cash accounts |
+| ACCUMULATING | ✅ Full | Reinvestment/accumulation notices (Ertragsmitteilung, thesaurierende Fonds) |
+| ORDER | 🟡 Partial | Order confirmations (Sammelauftragsbestätigung); one record per pending order — see limitations |
+| CRYPTO | ✅ Full | Crypto buy/sell settlements (Sammelabrechnung Kryptowerte) |
+| SAVINGSPLAN | ✅ Full | Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row |
 
 ## Language Support
 
@@ -203,18 +205,6 @@ Numbers are parsed format-agnostically (both `1.234,56` and `1,234.56` are
 accepted), so the German requirement is purely about field labels and keywords.
 Adding English support requires a real English sample to map the English labels.
 
-## Implementation Status
-
-| Document type | Status | Notes |
-|---|---|---|
-| TRADE | ✅ Full | Wertpapierabrechnung Kauf/Verkauf |
-| DIVIDEND | ✅ Full | Ausschüttung |
-| INTEREST | ✅ Full | Zinsen |
-| ACCUMULATING | ✅ Full | Ertragsmitteilung (thesaurierende Fonds) |
-| CRYPTO | ✅ Full | Sammelabrechnung Kryptowerte |
-| SAVINGSPLAN | ✅ Full | Sammelabrechnung aus (annual savings plan settlement) |
-| ORDER | 🟡 Partial | Sammelauftragsbestätigung — see limitations below |
-
 ## Known Limitations
 
 - **ORDER `security_name` includes the execution venue.** gxpdf does not always
@@ -222,7 +212,6 @@ Adding English support requires a real English sample to map the English labels.
   `"GLOBAL X COPPER MINERS ETXETRA"`), so the venue is left attached to the name
   rather than split unreliably. Order confirmations therefore do **not** populate
   a separate `execution_venue`.
-- **German only** — non-German PDFs are rejected (see Language Support).
 - **Metadata extraction (`depot_holder`, `depot_number`)** can be empty or noisy
   on documents whose layout places the value far from its label.
 - **Account number (`Konto Nr.`)** is matched at a fixed length (11 digits) to
@@ -231,20 +220,10 @@ Adding English support requires a real English sample to map the English labels.
 - **Synthetic test fixtures** in `testdata/` are visually faithful and PII-free,
   but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
   fixtures only exercise *type detection*, not full field extraction (the parsers
-  are verified against real documents instead). How these fixtures were made from
-  real documents — and why naive synthetic PDFs don't work — is covered in
-  [Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
+  are verified against real documents instead).
 - **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
-## Roadmap / TODO
-
-- [ ] Split ORDER `security_name` / `execution_venue` reliably (needs positional
-      extraction, not gxpdf's flattened text).
-- [ ] English-language document support (needs a real English sample).
-- [ ] More robust `depot_holder` / `depot_number` extraction.
-- [ ] Reading-order-preserving redaction so synthetic ORDER/CRYPTO fixtures parse
-      end-to-end.
-- [ ] Additional document types as samples become available (e.g. tax reports).
+Additional document types (e.g. tax reports) will be added as samples become available.
 
 ## Output Format
 
@@ -347,7 +326,9 @@ All extracted transactions are returned as JSON objects with the following struc
 - `custody_type` — Verwahrart (e.g. Kryptoverwahrung)
 - `depositary` — Kryptoverwahrer (e.g. Tangany GmbH)
 
-### Full Output Example (with metadata)
+### Metadata Wrapper (`-include-metadata`)
+
+With `-include-metadata`, the transaction list is wrapped in an object with depot metadata:
 
 ```json
 {
@@ -357,24 +338,12 @@ All extracted transactions are returned as JSON objects with the following struc
     "account_number": "9876543210"
   },
   "transactions": [
-    {
-      "order_number": "999888777/1",
-      "document_type": "TRADE",
-      "isin": "DE0005140008",
-      "wkn": "514000",
-      "date": "2024-06-15",
-      "type": "BUY",
-      "quantity": 10.0,
-      "price": 25.50,
-      "price_currency": "EUR",
-      "gross_value": 255.00,
-      "provision": 5.50,
-      "final_amount": 248.50,
-      "final_currency": "EUR"
-    }
+    { "document_type": "TRADE", "isin": "DE0005140008", "date": "2024-06-15" }
   ]
 }
 ```
+
+Transaction objects are as shown above (abbreviated here).
 
 ## Development
 
@@ -391,6 +360,13 @@ Run tests for a specific package with verbose output:
 ```bash
 go test -v ./internal/parser
 ```
+
+### Test Fixtures
+
+The fixtures in `testdata/` are real flatex PDFs with the PII redacted and
+replaced in place with synthetic values, so they behave exactly like production
+documents. How they were made — and why naive synthetic PDFs don't work — is
+covered in [Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
 
 ### Code Quality
 
@@ -410,46 +386,14 @@ golangci-lint run
 
 ### Pre-commit Hooks
 
-Optional: Set up pre-commit hooks to automatically format, lint, and test before commits:
-
-```bash
-# Install pre-commit framework
-pip install pre-commit
-
-# Install the git hooks
-pre-commit install
-
-# Run hooks on all files
-pre-commit run --all-files
-```
-
-The `.pre-commit-config.yaml` file runs `go fmt`, `go vet`, and `go test` automatically on commits.
+Optional: `pip install pre-commit && pre-commit install` — runs `go fmt`,
+`go vet`, and `go test` on every commit (config in `.pre-commit-config.yaml`).
 
 ## Project Structure
 
-```
-flatex-pdf-cli/
-├── main.go                 # CLI entry point and PDF discovery
-├── go.mod                  # Go module definition
-├── go.sum                  # Dependency checksums
-├── .golangci.yml          # Linter configuration
-├── .pre-commit-config.yaml # Pre-commit hooks configuration
-├── README.md              # This file
-├── .gitignore             # Git ignore rules
-├── internal/
-│   ├── extractor/         # PDF text extraction
-│   │   ├── extractor.go
-│   │   └── extractor_test.go
-│   ├── parser/            # Document type detection and parsing
-│   │   ├── parser.go
-│   │   └── parser_test.go
-│   └── schema/            # Data structures and validation
-│       ├── transaction.go
-│       ├── output.go
-│       └── schema_test.go
-├── skill/                 # Agent skill (SKILL.md) + INSTALL.md
-└── testdata/              # PII-free sample PDFs for tests
-```
+CLI entry point in `main.go`; PDF text extraction in `internal/extractor`,
+document detection and parsing in `internal/parser`, output types in
+`internal/schema`. Agent skill in `skill/`, PII-free sample PDFs in `testdata/`.
 
 ## Dependencies
 
