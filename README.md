@@ -233,7 +233,7 @@ Adding English support requires a real English sample to map the English labels.
   fixtures only exercise *type detection*, not full field extraction (the parsers
   are verified against real documents instead). How these fixtures were made from
   real documents — and why naive synthetic PDFs don't work — is covered in
-  [Your AI's Test Fixtures Are Lying to You](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
+  [Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
 - **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
 ## Roadmap / TODO
