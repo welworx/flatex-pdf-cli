@@ -37,12 +37,8 @@ The tool automatically detects and parses the following flatex document types:
 | CRYPTO | ✅ Full | Crypto buy/sell settlements (Sammelabrechnung Kryptowerte) |
 | SAVINGSPLAN | ✅ Full | Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row |
 
-**German PDFs only.** Document-type detection and field extraction are keyed to
-German labels (`Wertpapierabrechnung`, `Valuta`, `Devisenkurs`, …); non-German
-statements are detected and rejected with an error rather than silently
-mis-parsed. Numbers are parsed format-agnostically (both `1.234,56` and
-`1,234.56` are accepted), so the restriction is purely about field labels —
-English support needs a real English sample to map the labels.
+**German PDFs only** — non-German statements are rejected with an error (see
+[Known Limitations](#known-limitations)).
 
 ## Installation
 
@@ -165,6 +161,12 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
+- **German PDFs only.** Document-type detection and field extraction are keyed
+  to German labels (`Wertpapierabrechnung`, `Valuta`, `Devisenkurs`, …);
+  non-German statements are detected and rejected with an error rather than
+  silently mis-parsed. Numbers are parsed format-agnostically (both `1.234,56`
+  and `1,234.56` are accepted), so the restriction is purely about field
+  labels — English support needs a real English sample to map the labels.
 - **ORDER `security_name` includes the execution venue.** gxpdf does not always
   put a space between the Bezeichnung and Ausf.platz/-art columns (e.g.
   `"GLOBAL X COPPER MINERS ETXETRA"`), so the venue is left attached to the name
@@ -183,40 +185,12 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 Additional document types (e.g. tax reports) will be added as samples become available.
 
-## Development
+## Contributing & Development
 
-CLI entry point in `main.go`; PDF text extraction in `internal/extractor`,
-document detection and parsing in `internal/parser`, output types in
-`internal/schema`. Agent skill in `skill/`, PII-free sample PDFs in `testdata/`.
-Single dependency: [gxpdf](https://github.com/coregx/gxpdf) for PDF text
-extraction.
-
-### Running Tests
-
-```bash
-go test ./...                  # all tests
-go test -v ./internal/parser   # one package, verbose
-```
-
-### Test Fixtures
-
-The fixtures in `testdata/` are real flatex PDFs with the PII redacted and
-replaced in place with synthetic values, so they behave exactly like production
-documents. How they were made — and why naive synthetic PDFs don't work — is
-covered in [Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
-
-### Code Quality
-
-The project uses `golangci-lint` for linting (config in `.golangci.yml`):
-
-```bash
-go fmt ./...
-golangci-lint run
-```
-
-Optional pre-commit hooks: `pip install pre-commit && pre-commit install` —
-runs `go fmt`, `go vet`, and `go test` on every commit (config in
-`.pre-commit-config.yaml`).
+Contributions are welcome — bug reports, real-world sample documents (PII
+removed!), and code. Project layout, test/lint setup, how the PII-free test
+fixtures were made, and the PR checklist: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+For issues, feature requests, or questions, open an issue on GitHub.
 
 ## License
 
@@ -225,14 +199,3 @@ redistribute it, including for commercial purposes, provided the copyright
 notice is retained. The software is provided "as is", without warranty of any
 kind and with no liability on the author's part — see the LICENSE file for the
 full disclaimer.
-
-## Contributing
-
-Contributions are welcome! Please ensure:
-
-1. All tests pass: `go test ./...`
-2. Code is formatted: `go fmt ./...`
-3. Linter passes: `golangci-lint run`
-4. Commit messages follow conventional commits format
-
-For issues, feature requests, or questions, please open an issue on GitHub.
