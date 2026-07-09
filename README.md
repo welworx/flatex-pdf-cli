@@ -1,6 +1,7 @@
 # flatex-pdf-cli
 
-[![CI](https://github.com/welworx/flatex-pdf-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/welworx/flatex-pdf-cli/actions/workflows/ci.yml)
+[![CI](https://github.com/welworx/flatex-pdf-cli/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/welworx/flatex-pdf-cli/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/welworx/flatex-pdf-cli/badge.svg?branch=master)](https://coveralls.io/github/welworx/flatex-pdf-cli?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/welworx/flatex-pdf-cli)](https://goreportcard.com/report/github.com/welworx/flatex-pdf-cli)
 [![Release](https://img.shields.io/github/v/release/welworx/flatex-pdf-cli)](https://github.com/welworx/flatex-pdf-cli/releases/latest)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/welworx/flatex-pdf-cli)](go.mod)
