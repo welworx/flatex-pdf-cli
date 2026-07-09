@@ -231,7 +231,9 @@ Adding English support requires a real English sample to map the English labels.
 - **Synthetic test fixtures** in `testdata/` are visually faithful and PII-free,
   but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
   fixtures only exercise *type detection*, not full field extraction (the parsers
-  are verified against real documents instead).
+  are verified against real documents instead). How these fixtures were made from
+  real documents — and why naive synthetic PDFs don't work — is covered in
+  [Your AI's Test Fixtures Are Lying to You](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
 - **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
 ## Roadmap / TODO
