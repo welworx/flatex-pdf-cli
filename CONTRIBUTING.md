@@ -26,6 +26,13 @@ replaced in place with synthetic values, so they behave exactly like production
 documents. How they were made — and why naive synthetic PDFs don't work — is
 covered in [Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604).
 
+![PII redaction workflow](docs/assets/pii-redaction-workflow.svg)
+
+One known gap: the redaction re-inserts text out of reading order, so the ORDER
+and CRYPTO fixtures only exercise *type detection*, not full field extraction —
+those parsers are verified against real documents instead. A
+reading-order-preserving redaction would let them parse end-to-end.
+
 ## Code Quality
 
 The project uses `golangci-lint` for linting (config in `.golangci.yml`):
