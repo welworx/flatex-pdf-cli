@@ -6,7 +6,12 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/welworx/flatex-pdf-cli)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A command-line tool for extracting transaction data from flatex (a German online broker) PDF documents. Parses trade confirmations, dividend notices, interest notices, accumulation (Ertragsmitteilung) notices, order confirmations, and crypto settlements into structured JSON format.
+Get your transaction data out of flatex (a German online broker) PDF
+statements and into something you can actually use: structured **JSON** for
+your own tooling, **CSV** for spreadsheets, or ready-to-import files for
+**[Portfolio Performance](https://www.portfolio-performance.info/)**. Point it
+at a single PDF or a whole directory — trades, dividends, interest, fund
+distributions, orders, crypto, savings plans.
 
 > **Disclaimer:** This is an independent, unofficial open-source project. It is
 > **not** affiliated with, endorsed by, sponsored by, or in any way associated
@@ -17,11 +22,35 @@ A command-line tool for extracting transaction data from flatex (a German online
 
 ## Features
 
-- **Multiple Document Types**: Supports trade confirmations, dividend statements, interest notices, accumulation notices, order confirmations, and crypto settlements
-- **Batch Processing**: Process single PDF files or entire directories recursively
-- **Structured Output**: Extract data into JSON format with comprehensive transaction details
-- **Metadata Support**: Optionally include depot number and holder information in output
-- **Source Tracking**: Optionally add source filename to each transaction for auditing
+- **Seven document types** — trades, dividends, interest, accumulating funds, orders, crypto settlements, savings plans
+- **Three output formats** — JSON, CSV, and Portfolio Performance import files (English or German)
+- **Batch processing** — single PDFs or whole directory trees; one bad file never aborts the batch
+- **Depot metadata & audit trail** — optionally include depot number/holder and per-transaction source filename
+- **AI-agent ready** — ships a Claude Code skill so coding agents can drive the CLI
+
+## Quick Start
+
+```bash
+go install github.com/welworx/flatex-pdf-cli@latest
+flatex-pdf-cli ~/Downloads/statement.pdf
+```
+
+```json
+[
+  {
+    "document_type": "DIVIDEND",
+    "isin": "IE00B3RBWM25",
+    "date": "2025-10-01",
+    "quantity": 74.45,
+    "distribution_per_share": 0.422745,
+    "gross_amount": 31.47,
+    "net_amount": 22.43,
+    "net_currency": "EUR"
+  }
+]
+```
+
+Pre-built binaries and other install options: [skill/INSTALL.md](skill/INSTALL.md).
 
 ## Supported Documents
 
@@ -33,16 +62,12 @@ The tool automatically detects and parses the following flatex document types:
 | DIVIDEND | ✅ Full | Dividend payment statements (Ausschüttung) with distribution details and withholding tax |
 | INTEREST | ✅ Full | Interest payment notices (Zinsen) on cash accounts |
 | ACCUMULATING | ✅ Full | Reinvestment/accumulation notices (Ertragsmitteilung, thesaurierende Fonds) |
-| ORDER | 🟡 Partial | Order confirmations (Sammelauftragsbestätigung); one record per pending order — see limitations |
+| ORDER | 🟡 Partial | Order confirmations (Sammelauftragsbestätigung); one record per pending order — [see limitations](#known-limitations) |
 | CRYPTO | ✅ Full | Crypto buy/sell settlements (Sammelabrechnung Kryptowerte) |
 | SAVINGSPLAN | ✅ Full | Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row |
 
 **German PDFs only** — non-German statements are rejected with an error (see
 [Known Limitations](#known-limitations)).
-
-## Installation
-
-See [skill/INSTALL.md](skill/INSTALL.md) for detailed installation instructions (go install, build from source, pre-built binaries).
 
 ## Usage
 
@@ -56,7 +81,7 @@ flatex-pdf-cli path/to/documents/
 ### Flags
 
 - `-o FILE` — Output file (stdout if not provided)
-- `-format FORMAT` — Output format: `json` (default), `csv`, or `pp` (see Export Formats)
+- `-format FORMAT` — Output format: `json` (default), `csv`, or `pp` (Portfolio Performance)
 - `-lang LANG` — Language for `pp` output: `en` (default) or `de`
 - `-include-source` — Add source filename to each transaction
 - `-include-metadata` — Wrap output with depot metadata
@@ -84,50 +109,45 @@ flatex-pdf-cli -include-source -o transactions.json path/to/documents/
 flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
-Read more: [Portfolio Performance import](docs/portfolio-performance.md) ·
-[Organize your downloads](docs/organize-downloads.md) ·
-[JSON field reference](docs/output-format.md)
+## Use Cases
 
-## Export Formats
+### Import into Portfolio Performance
 
-By default the CLI emits JSON. Use `-format` to emit CSV instead:
-
-- `-format csv` — one row per transaction, every parsed field as a column. Good for spreadsheets or your own scripts.
-- `-format pp` — two CSVs shaped for [Portfolio Performance](https://www.portfolio-performance.info/)'s CSV import. Requires `-o <base>` since two files are written.
+`-format pp` writes two CSVs shaped for PP's CSV import — trades and account
+transactions. Use `-lang de` if your PP runs in German; PP's column
+auto-recognition is locale-sensitive, and `-lang de` emits the German headers,
+`Typ` values, and number format it expects.
 
 ```bash
-flatex-pdf-cli -format csv -o transactions.csv ~/Downloads/flatex
 flatex-pdf-cli -format pp -lang de -o portfolio ~/Downloads/flatex
 # writes portfolio-portfolio.csv and portfolio-accounts.csv
 ```
 
-Use `-lang de` if your Portfolio Performance runs in German — it emits German
-headers, `Typ` values, and number format so PP's locale-sensitive column
-auto-recognition works. Import walkthrough, `-lang de` details, and caveats:
-**[docs/portfolio-performance.md](docs/portfolio-performance.md)**.
+Read more: **[docs/portfolio-performance.md](docs/portfolio-performance.md)** — import walkthrough, `-lang de` details, caveats.
 
-## Organize Downloads
+### Export CSV for spreadsheets
+
+`-format csv` writes one row per transaction, every parsed field as a column.
+Good for spreadsheets or your own scripts.
+
+```bash
+flatex-pdf-cli -format csv -o transactions.csv ~/Downloads/flatex
+```
+
+### Organize your downloads
 
 Sort flatex PDFs from your Downloads folder into a structured archive — one
 folder per depot, files renamed by date and document type — using the CLI's
-JSON output and `jq`. Ready-to-paste shell recipes:
-**[docs/organize-downloads.md](docs/organize-downloads.md)**.
+JSON output and `jq`.
 
-## Use with AI Agents (Claude Code skill)
+Read more: **[docs/organize-downloads.md](docs/organize-downloads.md)** — ready-to-paste shell recipes.
 
-This repo ships a ready-made skill in [`skill/SKILL.md`](skill/SKILL.md) so AI
-coding agents can call the CLI to process flatex PDFs. Install it once:
+### Use from AI agents
 
-```bash
-# install the CLI, then the skill
-go install github.com/welworx/flatex-pdf-cli@latest
-git clone https://github.com/welworx/flatex-pdf-cli.git /tmp/flatex-pdf-cli
-mkdir -p ~/.claude/skills/flatex-pdf-cli
-cp /tmp/flatex-pdf-cli/skill/SKILL.md ~/.claude/skills/flatex-pdf-cli/
-```
+This repo ships a ready-made Claude Code skill so AI coding agents can call
+the CLI and consume its JSON (`flatex-pdf-cli -quiet -include-metadata <path>`).
 
-The agent then runs `flatex-pdf-cli -quiet -include-metadata <path>` and
-consumes the JSON. See the skill file for the full contract.
+Read more: **[skill/SKILL.md](skill/SKILL.md)** — the full agent contract and install steps ([skill/INSTALL.md](skill/INSTALL.md)).
 
 ## JSON Reference
 
@@ -181,20 +201,27 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 - **Account number (`Konto Nr.`)** is matched at a fixed length (11 digits) to
   work around a page-break run-on in text extraction; non-standard lengths won't
   match. (The depot number is matched at any length.)
-- **Synthetic test fixtures** in `testdata/` are visually faithful and PII-free,
-  but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
-  fixtures only exercise *type detection*, not full field extraction (the parsers
-  are verified against real documents instead).
 - **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
 Additional document types (e.g. tax reports) will be added as samples become available.
 
 ## Contributing & Development
 
-Contributions are welcome — bug reports, real-world sample documents (PII
-removed!), and code. Project layout, test/lint setup, how the PII-free test
-fixtures were made, and the PR checklist: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
-For issues, feature requests, or questions, open an issue on GitHub.
+Contributions are welcome — bug reports, code, and above all **real sample
+documents**. The parsers only get better with real-world PDFs, but broker
+statements are full of PII. This project's test fixtures are real flatex PDFs
+with the PII redacted and replaced in place with synthetic values — visually
+and structurally identical to production documents, safe for a public repo:
+
+![PII redaction workflow: parse the PDF, detect PII, redact and replace with synthetic values, verify, loop until clean](docs/assets/pii-redaction-workflow.svg)
+
+The full method — and why naively generated synthetic PDFs give you passing
+tests and a broken parser — is covered in
+**[Your AI's Test Fixtures Are Lying to You. Make real-world synthetic PDF files, PII safe!](https://pub.automatetherest.com/your-ais-test-fixtures-are-lying-to-you-0bc4f4ec7604)**
+
+Project layout, test/lint setup, and the PR checklist:
+[CONTRIBUTING.md](CONTRIBUTING.md). For issues, feature requests, or
+questions, open an issue on GitHub.
 
 ## License
 
