@@ -20,20 +20,20 @@ type Transaction struct {
 	Date              string `json:"date"`
 
 	// TRADE fields
-	Type            string  `json:"type,omitempty"`
-	Quantity        float64 `json:"quantity,omitempty"`
-	Price           float64 `json:"price,omitempty"`
-	PriceCurrency   string  `json:"price_currency,omitempty"`
-	GrossValue      float64 `json:"gross_value,omitempty"`
-	Provision       float64 `json:"provision,omitempty"`
-	WithholdingTax  float64 `json:"withholding_tax,omitempty"`
-	GainLoss        float64 `json:"gain_loss,omitempty"`
-	ExchangeRate    float64 `json:"exchange_rate,omitempty"`
-	FinalAmount     float64 `json:"final_amount,omitempty"`
-	FinalCurrency   string  `json:"final_currency,omitempty"`
-	CustodyType     string  `json:"custody_type,omitempty"`
-	Depositary      string  `json:"depositary,omitempty"`
-	ExecutionVenue  string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
+	Type           string  `json:"type,omitempty"`
+	Quantity       float64 `json:"quantity,omitempty"`
+	Price          float64 `json:"price,omitempty"`
+	PriceCurrency  string  `json:"price_currency,omitempty"`
+	GrossValue     float64 `json:"gross_value,omitempty"`
+	Provision      float64 `json:"provision,omitempty"`
+	WithholdingTax float64 `json:"withholding_tax,omitempty"`
+	GainLoss       float64 `json:"gain_loss,omitempty"`
+	ExchangeRate   float64 `json:"exchange_rate,omitempty"`
+	FinalAmount    float64 `json:"final_amount,omitempty"`
+	FinalCurrency  string  `json:"final_currency,omitempty"`
+	CustodyType    string  `json:"custody_type,omitempty"`
+	Depositary     string  `json:"depositary,omitempty"`
+	ExecutionVenue string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
 	// ORDER fields (Sammelauftragsbestätigung — pending orders)
 	Limit      float64 `json:"limit,omitempty"`       // Limit price

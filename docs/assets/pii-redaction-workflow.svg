@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3360" height="960" viewBox="0 0 1680 480" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1680" height="480" fill="white"/>
+
+  <!-- ===================== EDGES ===================== -->
+  <g fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M245,92 H298"/>                        <!-- PDF -> 1 -->
+    <path d="M500,92 H728"/>                         <!-- 1 -> 2 -->
+    <path d="M830,134 V288"/>                        <!-- 2 -> 3 (down) -->
+    <path d="M962,332 H1098"/>                       <!-- 3 -> Verify -->
+    <path d="M1342,332 H1418"/>                      <!-- Verify -> Fixture (Yes) -->
+  </g>
+  <!-- synthetic persona -> 3 -->
+  <path d="M330,332 H698" fill="none" stroke="#555" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <!-- No loop: Verify -> 3, routed below the bottom row -->
+  <path d="M1220,406 V446 H830 V376" fill="none" stroke="#555" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+
+  <!-- ===================== EDGE LABELS (above / beside their arrows) ===================== -->
+  <g font-size="15" fill="#333" text-anchor="middle">
+    <text x="614" y="80">text + positions + fonts</text>
+    <text x="938" y="215">PII strings + positions</text>
+    <text x="1030" y="320">anonymized copy</text>
+    <text x="514" y="320">replacement values</text>
+    <text x="1380" y="320">Yes</text>
+    <text x="1025" y="436">No</text>
+  </g>
+
+  <!-- ===================== NODES ===================== -->
+  <g font-size="18" text-anchor="middle">
+    <!-- PDF -->
+    <rect x="30" y="50" width="215" height="84" rx="12" fill="#fff3e0" stroke="#e0a96d" stroke-width="1.5"/>
+    <text x="137" y="88">🗂️ Real flatex PDF</text>
+    <text x="137" y="112" fill="#666" font-size="15">(with PII)</text>
+    <!-- 1 Parse -->
+    <rect x="300" y="50" width="200" height="84" rx="12" fill="#e1f5ff" stroke="#4aa3df" stroke-width="1.5"/>
+    <text x="400" y="98">🔍 1 · Parse PDF</text>
+    <!-- 2 Detect -->
+    <rect x="730" y="50" width="200" height="84" rx="12" fill="#e1f5ff" stroke="#4aa3df" stroke-width="1.5"/>
+    <text x="830" y="98">🔎 2 · Detect PII</text>
+
+    <!-- Synthetic persona -->
+    <rect x="30" y="290" width="300" height="84" rx="12" fill="#fff3e0" stroke="#e0a96d" stroke-width="1.5"/>
+    <text x="180" y="326">👤 Synthetic persona</text>
+    <text x="180" y="350" fill="#666" font-size="15">(name, address, numbers)</text>
+    <!-- 3 Redact (row 2, under step 2) -->
+    <rect x="700" y="290" width="262" height="84" rx="12" fill="#ffebee" stroke="#e57373" stroke-width="1.5"/>
+    <text x="831" y="338">🔄 3 · Redact &amp; Replace</text>
+    <!-- Verify decision (step 4 merged in) -->
+    <polygon points="1220,258 1342,332 1220,406 1098,332" fill="#ede7f6" stroke="#7e57c2" stroke-width="1.5"/>
+    <text x="1220" y="312" font-size="15" font-weight="bold">✅ 4 · Verify</text>
+    <text x="1220" y="334" font-size="14">All PII gone?</text>
+    <text x="1220" y="354" font-size="14">Layout intact?</text>
+    <!-- Fixture -->
+    <rect x="1420" y="290" width="210" height="84" rx="12" fill="#c8e6c9" stroke="#66bb6a" stroke-width="1.5"/>
+    <text x="1525" y="338">📦 Test Fixture</text>
+  </g>
+</svg>
