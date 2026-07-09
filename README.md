@@ -84,6 +84,10 @@ flatex-pdf-cli -include-source -o transactions.json path/to/documents/
 flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
+Read more: [Portfolio Performance import](docs/portfolio-performance.md) ·
+[Organize your downloads](docs/organize-downloads.md) ·
+[JSON field reference](docs/output-format.md)
+
 ## Export Formats
 
 By default the CLI emits JSON. Use `-format` to emit CSV instead:
