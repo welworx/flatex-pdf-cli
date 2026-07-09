@@ -85,6 +85,29 @@ Combine flags:
 ./flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
+## Export Formats
+
+By default the CLI emits JSON. Use `-format` to emit CSV instead:
+
+- `-format csv` — one row per transaction, every parsed field as a column. Good for spreadsheets or your own scripts.
+- `-format pp` — two CSVs shaped for [Portfolio Performance](https://www.portfolio-performance.info/)'s CSV import: `<base>-portfolio.csv` (buy/sell trades) and `<base>-accounts.csv` (dividends, interest, withheld tax on accumulating funds). Requires `-o <base>` since two files are written.
+
+```bash
+flatex-pdf-cli -format csv -o transactions.csv ~/Downloads/flatex
+flatex-pdf-cli -format pp -o portfolio ~/Downloads/flatex
+# writes portfolio-portfolio.csv and portfolio-accounts.csv
+```
+
+Then in Portfolio Performance: **File > Import > CSV Files**, pick the "Portfolio Transactions" or "Account Transactions" import, and use the matching CSV. PP's CSV import lets you re-map any column, so if a column isn't auto-recognized, map it by hand — after the first import, save the mapping as a template so later imports are one click.
+
+**Running PP in German?** Add `-lang de` to get German column headers (`Datum`, `Wert`, `Stück`, …), German `Typ` values (`Kauf`, `Verkauf`, `Dividende`, `Zinsen`, `Steuern`), a semicolon (`;`) field separator, and comma (`,`) as the decimal separator (e.g. `1,478695`, not `1.478695`) — all German-locale conventions, and all defaults PP's own import wizard already assumes on a German-locale install. PP's CSV column auto-recognition is locale-sensitive with no English fallback, so a German-locale PP install won't auto-map English headers at all — `-lang de` is what makes auto-recognition work without manually mapping every column or number format.
+
+```bash
+flatex-pdf-cli -format pp -lang de -o portfolio ~/Downloads/flatex
+```
+
+**Before bulk-importing, test-import a handful of rows first** and check the resulting positions/cash balance against a statement you trust. The column mapping above is our best-effort read of PP's documented CSV fields; it hasn't been validated against every edge case (e.g. multi-currency trades, partial fills).
+
 ## Organize Downloads
 
 Automatically sort flatex PDFs from your Downloads folder into a structured archive.
@@ -156,7 +179,7 @@ The tool automatically detects and parses the following flatex document types:
 - **ACCUMULATING** — Reinvestment/accumulation notices (Ertragsmitteilung, thesaurierende Fonds)
 - **ORDER** — Order confirmations (Sammelauftragsbestätigung); one record per pending order
 - **CRYPTO** — Crypto buy/sell settlements (Sammelabrechnung Kryptowerte)
-- **SPARPLAN** — Annual Sparplan settlement (Sammelabrechnung aus); one transaction per executed order row
+- **SAVINGSPLAN** — Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row
 
 ## Language Support
 
@@ -182,7 +205,7 @@ Adding English support requires a real English sample to map the English labels.
 | INTEREST | ✅ Full | Zinsen |
 | ACCUMULATING | ✅ Full | Ertragsmitteilung (thesaurierende Fonds) |
 | CRYPTO | ✅ Full | Sammelabrechnung Kryptowerte |
-| SPARPLAN | ✅ Full | Sammelabrechnung aus (annual savings plan settlement) |
+| SAVINGSPLAN | ✅ Full | Sammelabrechnung aus (annual savings plan settlement) |
 | ORDER | 🟡 Partial | Sammelauftragsbestätigung — see limitations below |
 
 ## Known Limitations
@@ -202,7 +225,7 @@ Adding English support requires a real English sample to map the English labels.
   but the redaction re-inserts text out of reading order, so the ORDER and CRYPTO
   fixtures only exercise *type detection*, not full field extraction (the parsers
   are verified against real documents instead).
-- **SPARPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
+- **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
 
 ## Roadmap / TODO
 
