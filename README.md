@@ -2,6 +2,13 @@
 
 A command-line tool for extracting transaction data from flatex (a German online broker) PDF documents. Parses trade confirmations, dividend notices, interest notices, accumulation (Ertragsmitteilung) notices, order confirmations, and crypto settlements into structured JSON format.
 
+> **Disclaimer:** This is an independent, unofficial open-source project. It is
+> **not** affiliated with, endorsed by, sponsored by, or in any way associated
+> with flatexDEGIRO AG, flatex, DEGIRO, or any of their subsidiaries. "flatex"
+> and "flatexDEGIRO" are trademarks of their respective owners and are used
+> here only to describe the document format this tool parses. Use at your own
+> risk; always verify extracted data against the original documents.
+
 ## Features
 
 - **Multiple Document Types**: Supports trade confirmations, dividend statements, interest notices, accumulation notices, order confirmations, and crypto settlements
