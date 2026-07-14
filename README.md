@@ -6,9 +6,10 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/welworx/flatex-pdf-cli)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Get your transaction data out of flatex (a German online broker) PDF
-statements and into something you can actually use: structured **JSON** for
-your own tooling, **CSV** for spreadsheets, or ready-to-import files for
+Get your transaction data out of flatex/flatexDEGIRO (a German online broker,
+also operating in Austria) PDF statements and into something you can actually
+use: structured **JSON** for your own tooling or **AI agents**, **CSV** for
+spreadsheets, or ready-to-import files for
 **[Portfolio Performance](https://www.portfolio-performance.info/)**. Point it
 at a single PDF or a whole directory — trades, dividends, interest, fund
 distributions, orders, crypto, savings plans.
@@ -66,8 +67,11 @@ The tool automatically detects and parses the following flatex document types:
 | CRYPTO | ✅ Full | Crypto buy/sell settlements (Sammelabrechnung Kryptowerte) |
 | SAVINGSPLAN | ✅ Full | Annual savings-plan settlement (Sammelabrechnung aus); one transaction per executed order row |
 
-**German PDFs only** — non-German statements are rejected with an error (see
-[Known Limitations](#known-limitations)).
+**German-language PDFs only** — non-German statements are rejected with an
+error (see [Known Limitations](#known-limitations)). Developed and tested
+against Austrian flatex statements; German (Germany) statements use the same
+platform and should follow the same layout, but haven't been verified against
+real samples yet — please open an issue if you hit a mismatch.
 
 ## Usage
 
@@ -186,12 +190,15 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
-- **German PDFs only.** Document-type detection and field extraction are keyed
-  to German labels (`Wertpapierabrechnung`, `Valuta`, `Devisenkurs`, …);
-  non-German statements are detected and rejected with an error rather than
-  silently mis-parsed. Numbers are parsed format-agnostically (both `1.234,56`
-  and `1,234.56` are accepted), so the restriction is purely about field
-  labels — English support needs a real English sample to map the labels.
+- **German-language PDFs only.** Document-type detection and field extraction
+  are keyed to German labels (`Wertpapierabrechnung`, `Valuta`,
+  `Devisenkurs`, …); non-German statements are detected and rejected with an
+  error rather than silently mis-parsed. Numbers are parsed
+  format-agnostically (both `1.234,56` and `1,234.56` are accepted), so the
+  restriction is purely about field labels — English support needs a real
+  English sample to map the labels. Developed and tested against Austrian
+  flatex statements only; German (Germany) statements haven't been verified
+  against real samples — please open an issue if you hit a mismatch.
 - **ORDER `security_name` includes the execution venue.** gxpdf does not always
   put a space between the Bezeichnung and Ausf.platz/-art columns (e.g.
   `"GLOBAL X COPPER MINERS ETXETRA"`), so the venue is left attached to the name
