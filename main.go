@@ -19,6 +19,10 @@ import (
 var version = ""
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		os.Exit(runUpgrade(os.Args[2:]))
+	}
+
 	outputFile := flag.String("o", "", "output file (stdout if not provided)")
 	format := flag.String("format", "json", "output format: json, csv, or pp (Portfolio Performance)")
 	lang := flag.String("lang", "en", "language for -format pp headers/labels: en or de")
@@ -206,6 +210,7 @@ func discoverPDFs(path string) ([]string, error) {
 
 func printUsage() {
 	fmt.Fprintf(os.Stderr, `Usage: %s [options] <path>
+       %s upgrade [-check] [-y]
 
 Process PDF files from flatex and extract transaction data.
 
@@ -220,5 +225,11 @@ Options:
 
 Arguments:
   <path>               path to PDF file or directory containing PDFs
-`, os.Args[0])
+
+Upgrade:
+  upgrade [-check] [-y]  check GitHub for a newer release and install it
+    -check                report whether a newer release exists, without installing it;
+                          exit code: 0 up to date, 1 upgrade available, 2 on error
+    -y                    skip the "Upgrade to vX.Y.Z? [y/N]" confirmation prompt
+`, os.Args[0], os.Args[0])
 }
