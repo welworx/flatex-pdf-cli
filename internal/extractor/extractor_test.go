@@ -162,6 +162,18 @@ Depotinhaber=John Doe
 	}
 }
 
+// TestMetadataExtractionSalutationFallback verifies that when the
+// "Depotinhaber" label is absent, the depot holder is still recovered from
+// the letter's salutation line.
+func TestMetadataExtractionSalutationFallback(t *testing.T) {
+	text := "Depotnummer: 31022213999\nSehr geehrte Frau Musterfrau,\nvielen Dank für Ihren Auftrag."
+
+	_, depotHolder := extractMetadata(text)
+	if depotHolder != "Musterfrau" {
+		t.Errorf("expected depot holder %q from salutation fallback, got %q", "Musterfrau", depotHolder)
+	}
+}
+
 // TestIntegrationTradeConfirmation tests end-to-end extraction of a trade confirmation PDF.
 // It verifies document type detection for TRADE documents with sample text.
 // NOTE: This test uses mocked text extraction. When real flatex PDFs are available,
