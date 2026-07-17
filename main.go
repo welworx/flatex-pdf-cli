@@ -19,6 +19,15 @@ import (
 var version = ""
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "upgrade":
+			os.Exit(runUpgrade(os.Args[2:]))
+		case "-help", "--help", "help":
+			os.Exit(help())
+		}
+	}
+
 	outputFile := flag.String("o", "", "output file (stdout if not provided)")
 	format := flag.String("format", "json", "output format: json, csv, or pp (Portfolio Performance)")
 	lang := flag.String("lang", "en", "language for -format pp headers/labels: en or de")
@@ -39,8 +48,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 {
-		printUsage()
-		os.Exit(1)
+		os.Exit(usage())
 	}
 
 	path := args[0]
@@ -204,12 +212,30 @@ func discoverPDFs(path string) ([]string, error) {
 	return pdfFiles, nil
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `Usage: %s [options] <path>
+func usage() int {
+	fmt.Fprintf(os.Stderr, `usage:
+  %[1]s [options] <file.pdf | directory>
+  %[1]s upgrade [-check] [-y]
+  %[1]s -version
 
-Process PDF files from flatex and extract transaction data.
+Run '%[1]s -help' for a full description and examples.
+`, os.Args[0])
+	return 2
+}
 
-Options:
+func help() int {
+	fmt.Printf(`flatex-pdf-cli - extract structured JSON from German flatexDEGIRO broker PDFs
+
+Parses trade confirmations, dividend/interest statements, crypto settlements,
+and order documents into structured transactions. Works on a single PDF or
+recursively over a directory of PDFs.
+
+USAGE
+  %[1]s [options] <file.pdf | directory>
+  %[1]s upgrade [-check] [-y]
+  %[1]s -version
+
+OPTIONS
   -o FILE              output file (stdout if not provided; for -format pp, base name for the two output files)
   -format FORMAT       output format: json (default), csv, or pp (Portfolio Performance)
   -lang LANG           language for -format pp headers/labels: en (default) or de
@@ -217,8 +243,29 @@ Options:
   -include-metadata    wrap output with depot metadata (json format only)
   -quiet               hide skipped/problematic files; emit only valid JSON
   -version             show version and exit
+  -help                show this help and exit
 
-Arguments:
-  <path>               path to PDF file or directory containing PDFs
+UPGRADE FLAGS
+  -check               report whether a newer release exists, without installing it;
+                       exit code: 0 up to date, 1 upgrade available, 2 on error
+  -y                   skip the "Upgrade to vX.Y.Z? [y/N]" confirmation prompt
+
+EXAMPLES
+  # single PDF to stdout
+  %[1]s path/to/statement.pdf
+
+  # whole directory, save to file
+  %[1]s -o output.json path/to/documents/
+
+  # Portfolio Performance import CSVs
+  %[1]s -format pp -o output.csv path/to/documents/
+
+  # include depot metadata and source filenames with each transaction
+  %[1]s -include-source -include-metadata path/to/documents/
+
+  # check for / install updates
+  %[1]s upgrade -check
+  %[1]s upgrade
 `, os.Args[0])
+	return 0
 }
