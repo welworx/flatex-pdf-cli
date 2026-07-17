@@ -113,6 +113,18 @@ flatex-pdf-cli -include-source -o transactions.json path/to/documents/
 flatex-pdf-cli -include-source -include-metadata -o output.json path/to/documents/
 ```
 
+### Upgrading
+
+```bash
+flatex-pdf-cli upgrade -check   # report whether a newer release is available
+flatex-pdf-cli upgrade          # check, then prompt to download and install it
+flatex-pdf-cli upgrade -y       # skip the confirmation prompt
+```
+
+Downloads the release asset for your platform from GitHub, verifies it
+against the published `SHA256SUMS.txt`, and atomically replaces the running
+binary.
+
 ## Use Cases
 
 ### Prepare a Portfolio Performance import
