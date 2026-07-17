@@ -14,6 +14,10 @@ spreadsheets, or ready-to-import files for
 at a single PDF or a whole directory — trades, dividends, interest, fund
 distributions, orders, crypto, savings plans.
 
+Don't have the PDFs yet? [**flatex-fetch**](https://github.com/welworx/flatex-fetch)
+logs into the flatex.at portal and downloads them for you; this tool then
+turns them into structured data.
+
 > **Disclaimer:** This is an independent, unofficial open-source project. It is
 > **not** affiliated with, endorsed by, sponsored by, or in any way associated
 > with flatexDEGIRO AG, flatex, DEGIRO, or any of their subsidiaries. "flatex"
