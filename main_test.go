@@ -29,6 +29,39 @@ func TestProcessPDFsContinuesPastFailures(t *testing.T) {
 	}
 }
 
+func TestDiscoverPDFsFindsAndSortsRecursively(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range []string{"b.pdf", "a.pdf", "sub/c.pdf", "notes.txt"} {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("MkdirAll failed: %v", err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile failed: %v", err)
+		}
+	}
+
+	got, err := discoverPDFs(dir)
+	if err != nil {
+		t.Fatalf("discoverPDFs failed: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(dir, "a.pdf"),
+		filepath.Join(dir, "b.pdf"),
+		filepath.Join(dir, "sub/c.pdf"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("expected %v, got %v", want, got)
+			break
+		}
+	}
+}
+
 func TestWriteOutputCSVFormat(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
