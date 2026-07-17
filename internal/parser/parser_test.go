@@ -2,6 +2,7 @@ package parser
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
@@ -555,4 +556,152 @@ func TestParseSavingsPlanRouting(t *testing.T) {
 	if len(txs) != 1 {
 		t.Errorf("expected 1 transaction via routing, got %d", len(txs))
 	}
+}
+
+// runMissingFieldCases asserts that removing each given substring from base
+// causes the parser to return an error, verifying the "field not found"
+// guard clauses that well-formed fixtures never exercise.
+func runMissingFieldCases(t *testing.T, docType string, base string, cases []struct {
+	name   string
+	remove string
+}, parse func(doc *extractor.ExtractedDocument) error) {
+	t.Helper()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			text := strings.Replace(base, c.remove, "", 1)
+			if text == base {
+				t.Fatalf("substring %q not found in base text", c.remove)
+			}
+			doc := &extractor.ExtractedDocument{Filename: "x.pdf", Text: text, DocumentType: docType}
+			if err := parse(doc); err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestParseTradeMissingRequiredFields(t *testing.T) {
+	base := "Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nAusführungsdatum : 15.06.2026"
+	cases := []struct {
+		name   string
+		remove string
+	}{
+		{"missing ISIN", "(IE000YU9K6K2/A3DP9J)"},
+		{"missing date", "Ausführungsdatum : 15.06.2026"},
+		{"missing quantity", "Ausgeführt : 1,058537 St."},
+		{"missing price", "Kurs : 47,235000 EUR"},
+		{"missing gross value", "Kurswert : 50,00 EUR"},
+	}
+	runMissingFieldCases(t, "TRADE", base, cases, func(doc *extractor.ExtractedDocument) error {
+		_, err := parseTrade(doc)
+		return err
+	})
+}
+
+func TestParseCryptoMissingRequiredFields(t *testing.T) {
+	base := "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n" +
+		"Nr.999000111/1    Kauf                           BITCOIN\n" +
+		"Ordervolumen: 0,014 St. Handelsplatz: Tradias\n" +
+		"davon ausgef.: 0,014 St. Schlusstag: 29.01.2026, 16:00 Uhr\n" +
+		"Kurs: 72.462,2200 EUR Kurswert: 1.014,47 EUR\n" +
+		"Devisenkurs: Provision: 5,07 EUR\n" +
+		"Valuta: 30.01.2026 Endbetrag: -1.019,54 EUR\n"
+	cases := []struct {
+		name   string
+		remove string
+	}{
+		{"missing order line", "Nr.999000111/1    Kauf                           BITCOIN"},
+		{"missing security name", "Kauf                           BITCOIN"},
+		{"missing trade date", "Schlusstag: 29.01.2026, 16:00 Uhr"},
+		{"missing quantity", "davon ausgef.: 0,014 St."},
+		{"missing price", "Kurs: 72.462,2200 EUR"},
+		{"missing gross value", "Kurswert: 1.014,47 EUR"},
+	}
+	runMissingFieldCases(t, "CRYPTO", base, cases, func(doc *extractor.ExtractedDocument) error {
+		_, err := parseCrypto(doc)
+		return err
+	})
+}
+
+func TestParseOrderConfirmationNoOrders(t *testing.T) {
+	doc := &extractor.ExtractedDocument{Filename: "order.pdf", Text: "no matching order blocks here", DocumentType: "ORDER"}
+	if _, err := parseOrderConfirmation(doc); err == nil {
+		t.Error("expected error when no order blocks match, got nil")
+	}
+}
+
+func TestParseDividendMissingRequiredFields(t *testing.T) {
+	base := "Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : 5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR"
+	cases := []struct {
+		name   string
+		remove string
+	}{
+		{"missing ISIN", "(IE00B3RBWM25/A1JX52)"},
+		{"missing value date", "Valuta : 01.01.2026"},
+		{"missing quantity", "St. : 78,70 Bruttoausschüttung"},
+		{"missing distribution per share", "pro Stück : 0,5459180 USD"},
+		{"missing gross amount", "Bruttoausschüttung : 42,96 USD"},
+		{"missing withholding tax", "Einbeh. Steuer : 5,39 EUR"},
+		{"missing net amount", "Endbetrag : 31,17 EUR"},
+	}
+	runMissingFieldCases(t, "DIVIDEND", base, cases, func(doc *extractor.ExtractedDocument) error {
+		_, err := parseDividend(doc)
+		return err
+	})
+}
+
+func TestParseInterestMissingRequiredFields(t *testing.T) {
+	base := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
+	cases := []struct {
+		name   string
+		remove string
+	}{
+		{"missing ISIN", "IE00B3RBWM25"},
+		{"missing value date", "Valuta : 15.04.2026"},
+		{"missing gross amount", "Bruttobetrag : 25,50 EUR"},
+		{"missing withholding tax", "Einbeh. KESt : 3,40 EUR"},
+		{"missing net amount", "Endbetrag : 22,10 EUR"},
+		{"missing interest rate", "Zinssatz : 2,5%"},
+	}
+	runMissingFieldCases(t, "INTEREST", base, cases, func(doc *extractor.ExtractedDocument) error {
+		_, err := parseInterest(doc)
+		return err
+	})
+}
+
+func TestParseAccumulatingMissingRequiredFields(t *testing.T) {
+	base := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
+	cases := []struct {
+		name   string
+		remove string
+	}{
+		{"missing ISIN", "(IE00B5L8K969/A2H514)"},
+		{"missing value date", "Valuta : 30.06.2026"},
+		{"missing quantity", "St. : 4,75 "},
+		{"missing reinvestment per share", "Stück : -0,572 USD"},
+		{"missing gross amount", "Bruttothesaurierung : -2,72 USD"},
+	}
+	runMissingFieldCases(t, "ACCUMULATING", base, cases, func(doc *extractor.ExtractedDocument) error {
+		_, err := parseAccumulating(doc)
+		return err
+	})
+}
+
+func TestParseSavingsPlanMissingRequiredFields(t *testing.T) {
+	t.Run("missing ISIN", func(t *testing.T) {
+		text := "Sammelabrechnung aus\nAuftrags-Nr:0003207723\n" +
+			"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n"
+		doc := &extractor.ExtractedDocument{Filename: "sp.pdf", Text: text, DocumentType: "SAVINGSPLAN"}
+		if _, err := parseSavingsPlan(doc); err == nil {
+			t.Error("expected error when ISIN missing, got nil")
+		}
+	})
+
+	t.Run("no rows found", func(t *testing.T) {
+		text := "Sammelabrechnung aus\nISIN: IE00B3RBWM25\n"
+		doc := &extractor.ExtractedDocument{Filename: "sp.pdf", Text: text, DocumentType: "SAVINGSPLAN"}
+		if _, err := parseSavingsPlan(doc); err == nil {
+			t.Error("expected error when no table rows match, got nil")
+		}
+	})
 }
