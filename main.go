@@ -25,6 +25,8 @@ func main() {
 			os.Exit(runUpgrade(os.Args[2:]))
 		case "-help", "--help", "help":
 			os.Exit(help())
+		case "-version", "--version", "version":
+			os.Exit(printVersion())
 		}
 	}
 
@@ -34,17 +36,7 @@ func main() {
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
-	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
-
-	if *showVersion {
-		v := version
-		if v == "" {
-			v = "dev"
-		}
-		fmt.Printf("flatex-pdf-cli version %s\n", v)
-		os.Exit(0)
-	}
 
 	args := flag.Args()
 	if len(args) == 0 {
@@ -210,6 +202,15 @@ func discoverPDFs(path string) ([]string, error) {
 	sort.Strings(pdfFiles)
 
 	return pdfFiles, nil
+}
+
+func printVersion() int {
+	v := version
+	if v == "" {
+		v = "dev"
+	}
+	fmt.Printf("flatex-pdf-cli %s\n", v)
+	return 0
 }
 
 func usage() int {
