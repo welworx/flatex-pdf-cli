@@ -2,7 +2,13 @@
 
 The tool is a single self-contained binary (no runtime dependencies).
 
-## Option A — download a pre-built binary (recommended)
+## Option A — Homebrew (macOS/Linux)
+
+```bash
+brew install welworx/tap/flatex-pdf-cli
+```
+
+## Option B — download a pre-built binary
 
 Grab the binary for your platform from the [releases page](https://github.com/welworx/flatex-pdf-cli/releases). Builds are published for:
 
@@ -21,7 +27,7 @@ chmod +x flatex-pdf-cli_darwin_arm64
 mv flatex-pdf-cli_darwin_arm64 /usr/local/bin/flatex-pdf-cli
 ```
 
-## Option B — go install (Go 1.26+)
+## Option C — go install (Go 1.26+)
 
 ```bash
 go install github.com/welworx/flatex-pdf-cli@latest
@@ -29,7 +35,7 @@ go install github.com/welworx/flatex-pdf-cli@latest
 
 The binary lands in `$(go env GOPATH)/bin`, which should be in your `$PATH`.
 
-## Option C — build from source
+## Option D — build from source
 
 ```bash
 git clone https://github.com/welworx/flatex-pdf-cli.git
