@@ -2,7 +2,7 @@ module github.com/welworx/flatex-pdf-cli
 
 go 1.26.4
 
-require github.com/coregx/gxpdf v0.8.2
+require github.com/coregx/gxpdf v0.8.3
 
 require (
 	github.com/richardlehane/mscfb v1.0.7 // indirect
