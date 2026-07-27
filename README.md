@@ -37,7 +37,9 @@ turns them into structured data.
 ## Quick Start
 
 ```bash
-go install github.com/welworx/flatex-pdf-cli@latest
+brew install welworx/tap/flatex-pdf-cli
+# or: go install github.com/welworx/flatex-pdf-cli@latest
+
 flatex-pdf-cli ~/Downloads/statement.pdf
 ```
 
