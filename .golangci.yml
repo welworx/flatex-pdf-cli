@@ -28,6 +28,11 @@ linters:
       - linters:
           - gosec
         path: _test\.go
+      # country.go is a table of German country names, which misspell reads as
+      # English typos ("Australien" -> "Australian").
+      - linters:
+          - misspell
+        path: internal/parser/country\.go
     paths:
       - third_party$
       - builtin$

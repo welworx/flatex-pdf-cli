@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
@@ -75,7 +76,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			t.ISIN,
 			t.WKN,
 			t.SecurityName,
-			formatAmount(t.Provision, lang),
+			formatAmount(t.TotalCosts(), lang),
 			formatAmount(t.WithholdingTax, lang),
 			t.PriceCurrency,
 			formatAmount(t.ExchangeRate, lang),
@@ -90,17 +91,20 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 }
 
 // portfolioValue computes PP's "Value" column: the total cash movement of a
-// buy/sell. CRYPTO already carries flatex's own computed settlement amount
-// (FinalAmount); TRADE/SAVINGSPLAN only carry GrossValue, so fees are added
-// back for a buy (more cash out) and subtracted for a sell (less cash in).
+// buy/sell. TRADE and CRYPTO carry flatex's own computed settlement amount
+// (Endbetrag/FinalAmount), which is signed by cash direction — negative for a
+// buy. PP wants the magnitude, with Buy/Sell carried by the Type column, so
+// the sign is dropped here. SAVINGSPLAN rows have no Endbetrag, so fees are
+// added back for a buy (more cash out) and subtracted for a sell (less cash
+// in).
 func portfolioValue(t *schema.Transaction) float64 {
 	if t.FinalAmount != 0 {
-		return t.FinalAmount
+		return math.Abs(t.FinalAmount)
 	}
 	if t.Type == "SELL" {
-		return t.GrossValue - t.Provision
+		return t.GrossValue - t.TotalCosts()
 	}
-	return t.GrossValue + t.Provision
+	return t.GrossValue + t.TotalCosts()
 }
 
 func ppTradeType(lang, tradeType string) (string, error) {

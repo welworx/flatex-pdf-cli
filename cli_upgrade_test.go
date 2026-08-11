@@ -426,6 +426,12 @@ func TestVersionNewer(t *testing.T) {
 		{"v0.2.0", "v0.2.1", true},
 		{"v0.2.1", "v0.2.0", false},
 		{"v1.0.0", "v0.99.99", false},
+		// A build from a source checkout carries a `git describe` suffix.
+		// It must compare as its base tag rather than failing to parse.
+		{"v0.4.2-7-gb62eea4", "v0.4.2", false},
+		{"v0.4.2-7-gb62eea4", "v0.4.3", true},
+		{"v0.4.2+build.5", "v0.4.2", false},
+		{"v0.4.2-rc.1", "v0.5.0", true},
 	}
 	for _, c := range cases {
 		got, err := versionNewer(c.current, c.latest)
@@ -435,6 +441,21 @@ func TestVersionNewer(t *testing.T) {
 		if got != c.want {
 			t.Errorf("versionNewer(%q, %q) = %v, want %v", c.current, c.latest, got, c.want)
 		}
+	}
+}
+
+// A version that is genuinely malformed must still be rejected, and the error
+// must quote what the user actually passed rather than a truncated fragment.
+func TestParseSemverRejectsMalformed(t *testing.T) {
+	for _, bad := range []string{"", "v1", "v1.2", "v1.2.x", "vx.2.3", "1.2.3.4.5-a"} {
+		if _, _, _, err := parseSemver(bad); err == nil {
+			t.Errorf("parseSemver(%q): expected an error, got nil", bad)
+		}
+	}
+
+	_, _, _, err := parseSemver("v1.2.x")
+	if err == nil || !strings.Contains(err.Error(), "v1.2.x") {
+		t.Errorf("expected the error to quote the original input, got: %v", err)
 	}
 }
 

@@ -18,7 +18,7 @@ func TestTradeTransactionMarshal(t *testing.T) {
 		Price:          47.235,
 		PriceCurrency:  "EUR",
 		GrossValue:     50.01,
-		Provision:      5.99,
+		Costs:          &Costs{Provision: 5.99, Total: 5.99},
 		WithholdingTax: 0.0,
 		GainLoss:       0.0,
 		ExchangeRate:   1.0,

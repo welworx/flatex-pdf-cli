@@ -10,8 +10,8 @@ import (
 
 func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Provision: 5},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Provision: 5},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Costs: &schema.Costs{Provision: 5, Total: 5}},
 		{DocumentType: "ORDER", ISIN: "IE000YU9K6K2", Date: "2024-06-17"}, // pending, must be skipped
 	}
 
@@ -34,7 +34,7 @@ func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 
 func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: 0.01, GrossValue: 500, Provision: 10, FinalAmount: 512},
+		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: 0.01, GrossValue: 500, Costs: &schema.Costs{Provision: 10, Total: 10}, FinalAmount: -510},
 	}
 
 	var buf bytes.Buffer
@@ -42,8 +42,10 @@ func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 		t.Fatalf("WritePortfolioTransactions failed: %v", err)
 	}
 
-	if !strings.Contains(buf.String(), "512") {
-		t.Errorf("expected Value to use FinalAmount (512), got: %s", buf.String())
+	// flatex signs Endbetrag by cash direction (negative for a buy); PP takes
+	// the magnitude and reads the direction from the Type column instead.
+	if !strings.Contains(buf.String(), "510") || strings.Contains(buf.String(), "-510") {
+		t.Errorf("expected Value to be FinalAmount's magnitude (510), got: %s", buf.String())
 	}
 }
 
@@ -152,8 +154,8 @@ func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 
 func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Provision: 5},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Provision: 5},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Costs: &schema.Costs{Provision: 5, Total: 5}},
 	}
 
 	var buf bytes.Buffer

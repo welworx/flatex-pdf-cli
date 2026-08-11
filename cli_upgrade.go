@@ -204,18 +204,27 @@ func platformAssetName() string {
 	return name
 }
 
-// parseSemver parses "vMAJOR.MINOR.PATCH".
+// parseSemver parses "vMAJOR.MINOR.PATCH", ignoring any semver pre-release or
+// build-metadata suffix. Building from a source checkout with
+// `-ldflags "-X main.version=$(git describe --tags)"` yields versions like
+// "v0.4.2-7-gb62eea4"; without this the upgrade check fails on them.
+// Only the release triple is compared, so a build a few commits past a tag
+// reads as that tag.
 func parseSemver(s string) (major, minor, patch int, err error) {
+	orig := s
 	s = strings.TrimPrefix(s, "v")
+	if i := strings.IndexAny(s, "-+"); i >= 0 {
+		s = s[:i]
+	}
 	parts := strings.SplitN(s, ".", 3)
 	if len(parts) != 3 {
-		return 0, 0, 0, fmt.Errorf("invalid version %q", s)
+		return 0, 0, 0, fmt.Errorf("invalid version %q", orig)
 	}
 	nums := make([]int, 3)
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
 		if err != nil {
-			return 0, 0, 0, fmt.Errorf("invalid version %q", s)
+			return 0, 0, 0, fmt.Errorf("invalid version %q", orig)
 		}
 		nums[i] = n
 	}

@@ -1,7 +1,8 @@
 # Test Data Directory
 
-Synthetic, **PII-free** flatex PDF fixtures used by the integration tests in
-`internal/extractor/extractor_test.go`.
+Synthetic, **PII-free** flatex PDF fixtures. `TestAllFixturesParse` in
+`internal/parser/parser_test.go` runs every one of them through the real
+extract-and-parse path and asserts the identifiers each should yield.
 
 ## How these were made
 
@@ -14,6 +15,13 @@ git-ignored `sensitive_test_docs/` directory and are **never committed**.
 
 To regenerate or add fixtures, point the skill at a document in
 `sensitive_test_docs/` and drop the redacted output here.
+
+**Do not skip the skill's reflow step.** PyMuPDF appends replacement text as a
+new content stream, so a fixture can render perfectly while every replaced
+identifier is out of position in content-stream order — which is the order
+`gxpdf` reads. All seven fixtures were once broken this way: two failed to parse
+at all and the rest silently returned empty order/transaction/depot numbers.
+After adding a fixture, run `go test ./internal/parser/ -run TestAllFixturesParse`.
 
 ## Fixtures
 
