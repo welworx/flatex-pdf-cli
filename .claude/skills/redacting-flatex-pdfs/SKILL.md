@@ -67,10 +67,10 @@ Assign a **different** persona per fixture so the corpus exercises titles, umlau
 | dividend 1 | Herrn / Johann Österreicher | Lindengasse 8, Stiege 2 Tür 5, 1070 Wien | 33000000031 / 33000000032 | 7000000033 / — |
 | dividend 2 | Frau / Anna-Maria Gruber | Ahornstrasse 23, Stiege 7 Tür 3, 1150 Wien | 44000000041 / 44000000042 | 7000000044 / — |
 | sparplan 1 | Herrn / Dr. Klaus Bergmann | Bergmannsgasse 17, Stiege 5 Tür 3, 1050 Wien | 55000000051 / — | — / 0005500055 |
-| krypto 1 | Herrn / Dr. Stefan Berger | Ahornstrasse 23, Stiege 2 Tür 5, 1150 Wien | 44000000041 / 44000000042 | 4400000044 / 440000111 |
-| order 1 | Herrn / Dr. Lukas Hofer | Lindengasse 8, Stiege 1 Tür 2, 1070 Wien | 33000000031 / — | — / 330000111, 330000222 |
+| krypto 1 | Herrn / Dr. Stefan Berger | Kirschenallee 9, Stiege 6 Tür 1, 1090 Wien | 66000000061 / 66000000062 (Verwahrkonto 66000000063) | 6600000066 / 660000111 |
+| order 1 | Herrn / Dr. Lukas Hofer | Hofergasse 4, Stiege 8 Tür 2, 1080 Wien | 77000000071 / — | — / 770000111, 770000222 |
 
-The krypto and order fixtures currently reuse the dividend-2 and dividend-1 numbers respectively — an artefact of when they were redacted, not a deliberate choice. Give any *new* fixture its own block so a cross-fixture mix-up cannot hide a bug.
+Every fixture has its own name, address and number block, so a cross-fixture mix-up cannot pass a test unnoticed. Keep it that way when adding one.
 
 Keep digit-string **lengths equal** to the originals so mono-column alignment is preserved. Umlauts (ä ö ü Ö) and hyphens are fine in both Helvetica and Courier (WinAnsi).
 
@@ -91,18 +91,27 @@ def b14(f):
 def redact(src, out, replacements):           # replacements: {old_text: synthetic}
     doc = fitz.open(src)
     for page in doc:
-        spans = [(fitz.Rect(s["bbox"]), s["origin"], s["font"], s["size"])
+        spans = [(fitz.Rect(s["bbox"]), s["origin"], s["font"], s["size"], s["text"])
                  for b in page.get_text("dict")["blocks"]
                  for l in b.get("lines", []) for s in l["spans"]]
         def span_at(r):
             c = fitz.Point((r.x0+r.x1)/2, (r.y0+r.y1)/2)
             return next((s for s in spans if s[0].contains(c)), None)
-        ins = []
-        for old, new in replacements.items():
+        ins, claimed = [], []
+        for old in sorted(replacements, key=len, reverse=True):   # longest first
+            new = replacements[old]
             for r in page.search_for(old):
                 s = span_at(r)
                 if not s: continue
-                page.add_redact_annot(r, fill=(1,1,1))          # erase original
+                # a value can occur inside the margin barcode's readable digits
+                if s[4].strip().isdigit() and len(s[4].strip()) > len(old): continue
+                # same text already claimed by a longer key (name vs name+comma)
+                if any(abs(c.y0-r.y0) < 1.0 and c.x0-1 <= r.x0 <= c.x1 for c in claimed):
+                    continue
+                claimed.append(fitz.Rect(r))
+                pad = r.height * 0.18                    # see "collateral damage"
+                box = fitz.Rect(r.x0+0.3, r.y0+pad, r.x1-0.3, r.y1-pad)
+                page.add_redact_annot(box, fill=(1,1,1))       # erase original
                 ins.append((r.x0, s[1][1], new, b14(s[2]), s[3]))  # x, baseline_y, text, font, size
         page.apply_redactions()
         for x, by, new, fn, sz in ins:
@@ -116,13 +125,28 @@ def redact(src, out, replacements):           # replacements: {old_text: synthet
 1. **Residual scan** — confirm no original token survives in the text:
    `"".join(p.get_text() for p in fitz.open(out))` must not contain any original name fragment or number.
 2. **Visual diff** — render before/after to PNG (`page.get_pixmap(dpi=200)`) and confirm layout + fonts match. Check the address block (Helvetica path) and a mono body line (Courier path) at high DPI.
-3. **Stream-order check** — the one that catches a missing reflow. `page.get_text()` (unsorted) must read the same as `page.get_text(sort=True)`. If a replaced value appears at the bottom of the unsorted text instead of in its slot, the reflow did not run or did not cover it.
-4. **Parse it** — `go test ./internal/parser/ -run TestAllFixturesParse`, or for a new file `flatex-pdf-cli -include-metadata <out.pdf>` and confirm every identifier (`order_number`, `transaction_number`, `depot_number`, `depot_holder`) is populated and correct. A visually perfect fixture that parses to empty identifiers is the exact failure this guards.
+3. **Content check** — build the expected text by applying the replacement map to the *original's* `get_text(sort=True)`, and compare it against the redacted file's. These must hold the same tokens. Anything missing means `apply_redactions` ate a neighbour; a token in a different position is usually a harmless sort flip between two columns, so compare the multiset (`collections.Counter`) before worrying.
+
+   Do **not** test "unsorted text == sorted text" as a proxy for correct ordering. flatex draws the margin barcodes out of reading order, so the pristine originals fail that check too — it flags nothing useful.
+
+4. **Diff the parsed JSON** — the strongest check, and the one that catches everything above at once. Run the CLI on the original *and* the redacted copy and diff:
+
+   ```bash
+   flatex-pdf-cli -quiet -include-metadata original.pdf   > /tmp/a.json
+   flatex-pdf-cli -quiet -include-metadata redacted.pdf   > /tmp/b.json
+   diff <(jq -S . /tmp/a.json) <(jq -S . /tmp/b.json)
+   ```
+
+   The transaction count must be equal and **the only differing leaves may be the fields you deliberately replaced**. A field that goes *empty* is a bug: that is how the clipped salutation comma was found — `depot_holder` silently became `""` because the extractor's fallback needs the comma the redaction had eaten.
+
+5. **Run the suite** — `go test ./internal/parser/ -run TestAllFixturesParse`.
 
 ## Common mistakes
 
 - **Skipping the reflow pass** → the page renders perfectly and a pixel diff passes, but every replaced identifier is out of position in stream order, so `gxpdf` hands the parser blanks. Trusting a visual diff alone is what let this ship.
-- **Trusting `page.get_text()` to prove ordering** → it sorts geometrically by default in some call shapes and reflects true stream order in others. Compare sorted against unsorted, and confirm with the Go parser.
+- **Replacing the bank's own address** → a street regex (`…strasse|gasse|weg|platz`) matches **Gadollaplatz 1** in the letterhead and footer just as happily as the customer's street, and rewrites flatex's Graz address into the synthetic one. Deny-list the corporate boilerplate: `Gadollaplatz 1`, `8010 Graz`, `Große Gallusstr. 16-18`, `60312 Frankfurt am Main`, `Omniturm`.
+- **Collateral damage from the redaction rect** → `apply_redactions()` deletes every glyph the rect *touches*, and `search_for` returns a full line box that reaches into the line above. On these pages the recipient name overlaps the small document code printed over it, silently deleting 13 digits of that code. Inset the rect (~18% of its height, plus ~0.3pt horizontally); a glyph is still removed as long as the rect intersects it at all, so shrinking cannot leave PII behind.
+- **Losing the punctuation next to a value** → the salutation reads `…<name>,` and the comma sits flush against the name. Redacting just the name clips it, and the extractor's salutation fallback (`Sehr geehrte[rn]? (Herr|Frau) (.+?),`) then matches nothing, so `depot_holder` comes out empty. Claim the comma in the replacement (`"<name>," -> "<new>,"`) and place longer keys first so the bare name does not re-match the same spot.
 - **Reusing embedded fonts** → Identity-H subsets can't map new Unicode; insertion silently falls back to Helvetica and the body text stops being monospaced. Always map to the base-14 clone.
 - **Changing digit-string length** → breaks the colon-aligned mono columns. Keep counts equal.
 - **Trying to re-insert rotated/vertical codes** → `insert_textbox(..., rotate=90)` often fails to fit and leaves a blank. Leave the barcode/postal codes alone.

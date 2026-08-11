@@ -841,12 +841,12 @@ func TestAllFixturesParse(t *testing.T) {
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
-			orderNumber: "440000111/1", transactionNumber: "4400000044",
+			orderNumber: "660000111/1", transactionNumber: "6600000066",
 		},
 		{
 			file: "orderbestaetigung_sample_1.pdf", docType: "ORDER", wantTransactions: 2,
-			orderNumber: "330000111",
-			depotNumber: "33000000031", depotHolder: "Dr. Lukas Hofer",
+			orderNumber: "770000111",
+			depotNumber: "77000000071", depotHolder: "Hofer, Lukas",
 		},
 		{
 			file: "dividend_sample_1.pdf", docType: "DIVIDEND", wantTransactions: 1,
@@ -858,7 +858,7 @@ func TestAllFixturesParse(t *testing.T) {
 		},
 		{
 			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
-			depotNumber: "55000000051",
+			depotNumber: "55000000051", depotHolder: "Dr. Klaus Bergmann",
 		},
 	}
 
