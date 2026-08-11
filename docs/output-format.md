@@ -16,22 +16,35 @@ All extracted transactions are returned as JSON objects with the following struc
   "isin": "DE0005140008",
   "wkn": "514000",
   "date": "2024-06-15",
+  "order_date": "2024-06-13",
+  "value_date": "2024-06-17",
   "type": "BUY",
   "quantity": 10.0,
   "price": 25.50,
   "price_currency": "EUR",
   "gross_value": 255.00,
-  "provision": 5.50,
-  "own_costs": 1.00,
-  "third_party_costs": 0.00,
+  "costs": {
+    "provision": 5.50,
+    "own_expenses": 0.00,
+    "foreign_expenses": 3.00,
+    "total": 8.50,
+    "fees": {
+      "courtage": 0.00,
+      "trading_fee": 0.50,
+      "settlement": 2.50,
+      "closing_notes": 0.00,
+      "ls_allocation": 0.00,
+      "financial_transaction_tax": 0.00,
+      "other": 0.00
+    }
+  },
   "withholding_tax": 0.00,
   "gain_loss": 0.00,
   "exchange_rate": 1.0,
-  "final_amount": 248.50,
+  "final_amount": -263.50,
   "final_currency": "EUR",
-  "custody_type": "DEPOT",
-  "depositary": "flatex",
-  "country": "DE",
+  "custody_type": "Wertpapierrechnung",
+  "depositary": "Clearstream Lux.",
   "execution_venue": "XETRA"
 }
 ```
@@ -44,7 +57,28 @@ All extracted transactions are returned as JSON objects with the following struc
 - `document_type` — Type of document (TRADE, DIVIDEND, INTEREST, ACCUMULATING, ORDER, CRYPTO, SAVINGSPLAN)
 - `isin` — ISIN of the security
 - `wkn` — German securities identification number (if available)
-- `date` — Transaction date in YYYY-MM-DD format
+- `date` — Transaction date in YYYY-MM-DD format. See [Which date is `date`?](#which-date-is-date).
+
+## Which date is `date`?
+
+A flatex trade confirmation prints four dates, and they are frequently
+different days:
+
+| Label | Meaning | Field |
+|---|---|---|
+| `Graz, …` | Letter/print date — when the PDF was generated | *not extracted* |
+| `Auftragsdatum` | When the order was placed | `order_date` |
+| `Handelstag` (`Schlusstag` on crypto, `Buchtag` on savings plans) | When the trade executed | `date` |
+| `Valuta` | When cash and securities settle | `value_date` |
+
+`date` is the **trade date**, because that is the date that fixes the price
+and the holding period, and it is the date Portfolio Performance expects in
+the `Datum` column of a portfolio-transaction import. `order_date` and
+`value_date` are emitted alongside it so a different convention needs no
+re-parsing.
+
+For pure cash events with no trade — `DIVIDEND`, `INTEREST`,
+`ACCUMULATING` — `date` is the `Valuta`, since that is when the money moves.
 
 ## Trade-Specific Fields
 
@@ -52,19 +86,41 @@ All extracted transactions are returned as JSON objects with the following struc
 - `quantity` — Number of shares/units
 - `price` — Price per unit
 - `price_currency` — Currency of price
-- `gross_value` — Total transaction value before costs
-- `provision` — Broker commission/fee
-- `own_costs` — Costs charged by the investor's bank
-- `third_party_costs` — Costs charged by third parties
-- `withholding_tax` — Tax withheld on transaction
+- `gross_value` — Kurswert: quantity × price, before costs
+- `order_date` — Auftragsdatum, when the order was placed
+- `value_date` — Valuta, when the trade settles
+- `costs` — Charge block; see [Costs](#costs)
+- `withholding_tax` — Tax withheld on the transaction (Einbeh. KESt on trades,
+  Einbeh. Steuer on dividends and crypto)
 - `gain_loss` — Capital gain or loss (sell transactions)
-- `exchange_rate` — Currency exchange rate (if applicable)
-- `final_amount` — Net amount after all costs and taxes
+- `exchange_rate` — Currency exchange rate (1.0 when the document has no Devisenkurs)
+- `final_amount` — Endbetrag, signed by cash direction: **negative for a buy**
 - `final_currency` — Currency of final amount
-- `custody_type` — Type of custody (DEPOT, etc.)
-- `depositary` — Depositary institution name
-- `country` — Country code of security
+- `custody_type` — Verwahrart, e.g. `Wertpapierrechnung`
+- `depositary` — Lagerstelle, e.g. `Clearstream Lux.`
 - `execution_venue` — Execution venue/type (Ausf.platz/-art), e.g. XETRA
+
+## Costs
+
+`costs` is present whenever the document has a charge block, and **absent when
+it has none** — so a dividend notice has no `costs` key at all, while a trade
+that cost nothing reports explicit zeros. Unlike the rest of the schema, the
+fields inside `costs` are emitted even when zero, because "flatex charged
+nothing" and "this was never parsed" are different answers.
+
+- `provision` — Provision, flatex's own commission
+- `own_expenses` — Eigene Spesen
+- `foreign_expenses` — Fremde Spesen, charges passed through from third parties
+- `total` — `provision + own_expenses + foreign_expenses`; the number to use as
+  the transaction's total cost
+- `fees` — itemisation of `foreign_expenses` from the document's
+  "Enthalten sind folgende Gebühren" block, present only when that block is:
+  `courtage`, `trading_fee` (Tradinggebühr), `settlement` (Regulierung),
+  `closing_notes` (Schlussnoten), `ls_allocation` (LS-Umlegung),
+  `financial_transaction_tax` (Finanztransaktionssteuer), `other` (Sonstige).
+
+The `fees` components sum to `foreign_expenses` and are therefore already
+counted in `total`. **Do not add them on top of it.**
 
 ## Dividend-Specific Fields
 

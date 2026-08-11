@@ -52,10 +52,20 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		return nil, fmt.Errorf("ISIN not found in document")
 	}
 
-	// Extract date
-	date := extractDate(text)
+	// flatex prints four dates in a trade header: the letter date ("Graz,
+	// 16.09.2025"), Auftragsdatum (order placed), Handelstag (executed) and
+	// Valuta (settled). Handelstag is the one that dates the position change
+	// and is what Portfolio Performance imports as the transaction date.
+	// Scanning for the first date-shaped string in the document instead
+	// picked up the letter date, which is usually a day or more late.
+	date := firstNonEmpty(
+		dateField(text, `Handelstag`),
+		dateField(text, `Schlusstag`),
+		dateField(text, `Ausführungsdatum`),
+		dateField(text, `Auftragsdatum`),
+	)
 	if date == "" {
-		return nil, fmt.Errorf("date not found in document")
+		return nil, fmt.Errorf("trade date (Handelstag) not found in document")
 	}
 
 	// Determine trade type: "Kauf" → "BUY", "Verkauf" → "SELL"
@@ -88,13 +98,6 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	// Extract provision (fees)
-	provision, err := extractFloat(text, `Provision\s*:\s*([\d\s.,]+)\s*EUR`)
-	if err != nil {
-		// Default to 0 if not found (some trades may have no provision)
-		provision = 0
-	}
-
 	// Extract exchange rate (optional, default to 1.0)
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
 	if err != nil {
@@ -113,6 +116,13 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	transactionNumber := extractString(text, `Transaktion-Nr\.\s*:?\s*(\d+)`)
 	executionVenue := extractString(text, `Ausf\.platz/-art\s*([^\n]+)`)
 
+	// Trades carry the withheld capital-gains tax as "Einbeh. KESt"; the
+	// "Einbeh. Steuer" label used on dividend and crypto documents does not
+	// appear here.
+	withholdingTax, _ := eurField(text, `Einbeh\.[^\S\n]*KESt`)
+	gainLoss, _ := eurField(text, `Gewinn/Verlust`)
+	finalAmount, _ := eurField(text, `Endbetrag`)
+
 	transaction := &schema.Transaction{
 		OrderNumber:       orderNumber,
 		TransactionNumber: transactionNumber,
@@ -120,14 +130,22 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		ISIN:              isin,
 		WKN:               wkn,
 		Date:              date,
+		OrderDate:         dateField(text, `Auftragsdatum`),
+		ValueDate:         dateField(text, `Valuta`),
 		Type:              tradeType,
 		Quantity:          quantity,
 		Price:             price,
 		PriceCurrency:     currency,
 		GrossValue:        grossValue,
-		Provision:         provision,
+		WithholdingTax:    withholdingTax,
+		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
+		FinalAmount:       finalAmount,
+		FinalCurrency:     "EUR",
+		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
+		Depositary:        extractString(text, `Lagerstelle[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		ExecutionVenue:    executionVenue,
+		Costs:             extractCosts(text),
 	}
 
 	return transaction, nil
@@ -174,7 +192,6 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	provision, _ := extractFloat(text, `Provision:\s*([\d.,]+)\s*EUR`)
 	withholdingTax, _ := extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`)
 	gainLoss, _ := extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`)
 	finalAmount, _ := extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`)
@@ -195,7 +212,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		Price:             price,
 		PriceCurrency:     "EUR",
 		GrossValue:        grossValue,
-		Provision:         provision,
+		Costs:             extractCosts(text),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
@@ -571,7 +588,7 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 
 	// Each row: K/V  Buchtag  Valuta  Stücke/Nom.  Ausf.-Kurs  EUR  Betrag  EUR
 	rowRe := regexp.MustCompile(
-		`(Kauf|Verkauf)\s+(\d{2}\.\d{2}\.\d{4})\s+\d{2}\.\d{2}\.\d{4}\s+([\d,]+)\s+([\d.,]+)\s+EUR\s+([\d.,]+)\s+EUR`,
+		`(Kauf|Verkauf)\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{2}\.\d{2}\.\d{4})\s+([\d,]+)\s+([\d.,]+)\s+EUR\s+([\d.,]+)\s+EUR`,
 	)
 
 	var txns []*schema.Transaction
@@ -586,12 +603,17 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			WKN:           wkn,
 			OrderNumber:   orderNumber,
 			SecurityName:  securityName,
-			Date:          convertGermanDate(m[2]),
+			Date:          convertGermanDate(m[2]), // Buchtag — the trade date of the row
+			ValueDate:     convertGermanDate(m[3]), // Valuta — settlement
 			Type:          tradeType,
-			Quantity:      mustFloat(m[3]),
-			Price:         mustFloat(m[4]),
+			Quantity:      mustFloat(m[4]),
+			Price:         mustFloat(m[5]),
 			PriceCurrency: "EUR",
-			GrossValue:    mustFloat(m[5]),
+			GrossValue:    mustFloat(m[6]),
+			// Savings-plan rows are settled in EUR and carry no Devisenkurs
+			// line; without an explicit 1.0 the PP export writes an exchange
+			// rate of 0.
+			ExchangeRate: 1.0,
 		})
 	}
 
@@ -599,6 +621,73 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		return nil, fmt.Errorf("no rows found in Sammelabrechnung table")
 	}
 	return txns, nil
+}
+
+// hSpace matches horizontal whitespace only. Field patterns use it instead of
+// \s so that a label whose value column is blank cannot reach across the line
+// break and capture the next line's number or date.
+const hSpace = `[^\S\n]*`
+
+// dateField reads a "<label> [:] DD.MM.YYYY" header field and returns it as
+// YYYY-MM-DD, or "" if the label has no date on its own line.
+func dateField(text, label string) string {
+	return convertGermanDate(extractString(text, label+hSpace+`:?`+hSpace+`(\d{2}\.\d{2}\.\d{4})`))
+}
+
+// eurField reads a "<label> [:] <amount> EUR" money line.
+func eurField(text, label string) (float64, error) {
+	return extractFloat(text, label+hSpace+`:?`+hSpace+`(-?[\d.,]+)`+hSpace+`EUR`)
+}
+
+// firstNonEmpty returns the first non-empty argument, or "".
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// extractCosts parses a settlement's charge block: Provision plus the two
+// Spesen lines, and the itemised Gebühren breakdown when present. It returns
+// nil when the document has no Provision line at all, so that a document
+// without a cost section stays distinguishable from one that charged 0,00.
+func extractCosts(text string) *schema.Costs {
+	provision, err := eurField(text, `Provision`)
+	if err != nil {
+		return nil
+	}
+	own, _ := eurField(text, `Eigene[^\S\n]*Spesen`)
+	foreign, _ := eurField(text, `Fremde[^\S\n]*Spesen`)
+
+	c := &schema.Costs{
+		Provision:       provision,
+		OwnExpenses:     own,
+		ForeignExpenses: foreign,
+		Total:           provision + own + foreign,
+	}
+
+	// The itemised lines are only meaningful under their "Enthalten sind
+	// folgende Gebühren" heading, which marks them as the breakdown of
+	// Fremde Spesen rather than additional charges.
+	if strings.Contains(text, "Enthalten sind folgende Gebühren") {
+		c.Fees = &schema.Fees{
+			Courtage:                feeLine(text, `Courtage`),
+			TradingFee:              feeLine(text, `Tradinggebühr`),
+			Settlement:              feeLine(text, `Regulierung`),
+			ClosingNotes:            feeLine(text, `Schlussnoten`),
+			LSAllocation:            feeLine(text, `LS-Umlegung`),
+			FinancialTransactionTax: feeLine(text, `Finanztransaktionssteuer`),
+			Other:                   feeLine(text, `Sonstige`),
+		}
+	}
+	return c
+}
+
+func feeLine(text, label string) float64 {
+	f, _ := eurField(text, label)
+	return f
 }
 
 // extractFloat extracts a float from text using a regex pattern.
@@ -689,20 +778,4 @@ func extractISIN(text string) string {
 func extractWKN(text string) string {
 	pattern := `\b([A-Z0-9]{6})\b`
 	return extractString(text, pattern)
-}
-
-// extractDate extracts a date in DD.MM.YYYY format and converts to YYYY-MM-DD.
-func extractDate(text string) string {
-	pattern := `(\d{2})\.(\d{2})\.(\d{4})`
-	regex := regexp.MustCompile(pattern)
-	matches := regex.FindStringSubmatch(text)
-	if len(matches) < 4 {
-		return ""
-	}
-
-	day := matches[1]
-	month := matches[2]
-	year := matches[3]
-
-	return fmt.Sprintf("%s-%s-%s", year, month, day)
 }

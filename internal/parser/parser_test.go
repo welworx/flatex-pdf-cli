@@ -193,8 +193,11 @@ func TestParseTradeBuy(t *testing.T) {
 	if tx.GrossValue != 50.00 {
 		t.Errorf("expected GrossValue=50.00, got %f", tx.GrossValue)
 	}
-	if tx.Provision != 0.00 {
-		t.Errorf("expected Provision=0.00, got %f", tx.Provision)
+	if tx.Costs == nil {
+		t.Fatal("expected a cost block, got nil")
+	}
+	if tx.Costs.Provision != 0.00 {
+		t.Errorf("expected Provision=0.00, got %f", tx.Costs.Provision)
 	}
 }
 
@@ -265,7 +268,8 @@ func TestParseCrypto(t *testing.T) {
 		{"Quantity", tx.Quantity, 0.014},
 		{"Price", tx.Price, 72462.22},
 		{"GrossValue", tx.GrossValue, 1014.47},
-		{"Provision", tx.Provision, 5.07},
+		{"Provision", tx.Costs.Provision, 5.07},
+		{"TotalCosts", tx.TotalCosts(), 5.07},
 		{"FinalAmount", tx.FinalAmount, -1019.54},
 		{"Date", tx.Date, "2026-01-29"},
 		{"ValueDate", tx.ValueDate, "2026-01-30"},
@@ -828,37 +832,49 @@ func TestAllFixturesParse(t *testing.T) {
 		transactionNumber string
 		depotNumber       string
 		depotHolder       string
+		date              string // txs[0].Date — the trade/value date, not the letter date
+		orderDate         string
+		valueDate         string
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
 			orderNumber: "700000011/1", transactionNumber: "7000000011",
 			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
+			// Letter date is 16.09.2025; Handelstag is 15.09.2025.
+			date: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
 		},
 		{
 			file: "trade_sample_2.pdf", docType: "TRADE", wantTransactions: 1,
 			orderNumber: "800000022/1", transactionNumber: "7000000022",
 			depotNumber: "22000000021", depotHolder: "Beispiel, Erika",
+			// Auftragsdatum 28.01. and Valuta 03.02. straddle Handelstag 30.01.
+			date: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
 			orderNumber: "660000111/1", transactionNumber: "6600000066",
+			date: "2026-01-29", valueDate: "2026-01-30",
 		},
 		{
 			file: "orderbestaetigung_sample_1.pdf", docType: "ORDER", wantTransactions: 2,
 			orderNumber: "770000111",
 			depotNumber: "77000000071", depotHolder: "Hofer, Lukas",
+			date: "2026-01-28",
 		},
 		{
 			file: "dividend_sample_1.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "33000000031", depotHolder: "Österreicher, Johann",
+			date: "2025-10-01", valueDate: "2025-10-01",
 		},
 		{
 			file: "dividend_sample_2.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "44000000041", depotHolder: "Gruber, Anna-Maria",
+			date: "2025-10-01", valueDate: "2025-10-01",
 		},
 		{
 			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
 			depotNumber: "55000000051", depotHolder: "Dr. Klaus Bergmann",
+			date: "2025-01-15", valueDate: "2025-01-17",
 		},
 	}
 
@@ -892,6 +908,186 @@ func TestAllFixturesParse(t *testing.T) {
 				t.Errorf("transaction number = %q, want %q",
 					txs[0].TransactionNumber, tc.transactionNumber)
 			}
+			for _, d := range []struct{ name, got, want string }{
+				{"date", txs[0].Date, tc.date},
+				{"order date", txs[0].OrderDate, tc.orderDate},
+				{"value date", txs[0].ValueDate, tc.valueDate},
+			} {
+				if d.want != "" && d.got != d.want {
+					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)
+				}
+			}
 		})
+	}
+}
+
+// tradeHeader is the header block of a real flatex trade confirmation, in the
+// order gxpdf yields it. The letter date ("Graz, …") precedes all three
+// transaction dates, which is what made a first-date-wins scan pick it up.
+const tradeHeader = "             Graz, 16.09.2025\n" +
+	"Auftragsdatum      15.09.2025\n" +
+	"Handelstag         12.09.2025\n" +
+	"Ausführungszeit    00:00 Uhr\n" +
+	"Valuta             17.09.2025\n" +
+	"Auftragsnummer     700000011/1\n"
+
+const tradeBody = "Nr.700000011/1     Kauf              L&G GOLD MINING ETF (IE00B3CNHG25/A0Q8HZ)\n" +
+	"Ausgeführt    :        0,685401 St.     Kurswert      :              50,00 EUR\n" +
+	"Kurs          :       72,950000 EUR     Provision     :               0,00 EUR\n"
+
+// TestParseTradeUsesHandelstagNotLetterDate pins which of the four dates on a
+// trade confirmation becomes Date. Handelstag dates the position change and is
+// what Portfolio Performance imports; the letter date, Auftragsdatum and
+// Valuta are all distinct here so a regression cannot pass by coincidence.
+func TestParseTradeUsesHandelstagNotLetterDate(t *testing.T) {
+	doc := &extractor.ExtractedDocument{
+		Filename: "trade.pdf", Text: tradeHeader + tradeBody, DocumentType: "TRADE",
+	}
+
+	tx, err := parseTrade(doc)
+	if err != nil {
+		t.Fatalf("parseTrade failed: %v", err)
+	}
+	if tx.Date != "2025-09-12" {
+		t.Errorf("Date = %q, want the Handelstag 2025-09-12", tx.Date)
+	}
+	if tx.OrderDate != "2025-09-15" {
+		t.Errorf("OrderDate = %q, want the Auftragsdatum 2025-09-15", tx.OrderDate)
+	}
+	if tx.ValueDate != "2025-09-17" {
+		t.Errorf("ValueDate = %q, want the Valuta 2025-09-17", tx.ValueDate)
+	}
+}
+
+// A trade with no Handelstag falls back down the chain rather than reaching
+// for the letter date, and fails outright when no transaction date exists.
+func TestParseTradeDateFallback(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   string // "" means parseTrade must fail
+	}{
+		{"Handelstag wins", tradeHeader, "2025-09-12"},
+		{
+			"falls back to Auftragsdatum",
+			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "2025-09-15",
+		},
+		{
+			"falls back to Schlusstag",
+			"             Graz, 16.09.2025\nSchlusstag: 11.09.2025, 16:00 Uhr\n", "2025-09-11",
+		},
+		{"letter date alone is not a trade date", "             Graz, 16.09.2025\n", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := &extractor.ExtractedDocument{
+				Filename: "trade.pdf", Text: tc.header + tradeBody, DocumentType: "TRADE",
+			}
+			tx, err := parseTrade(doc)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("expected an error, got Date=%q", tx.Date)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseTrade failed: %v", err)
+			}
+			if tx.Date != tc.want {
+				t.Errorf("Date = %q, want %q", tx.Date, tc.want)
+			}
+		})
+	}
+}
+
+// TestParseTradeCosts covers the charge block: Provision, both Spesen lines,
+// and the itemised Gebühren that make up Fremde Spesen. The layout is the one
+// from trade_sample_2 — Tradinggebühr + Regulierung sum to Fremde Spesen,
+// which must not then be added on top of it.
+func TestParseTradeCosts(t *testing.T) {
+	text := tradeHeader +
+		"Nr.800000022/1     Kauf       GLOBAL X COPPER MINERS ET (IE0003Z9E2Y3/A3C7FZ)\n" +
+		"Ausgeführt: 35 St.Kurswert: 2.034,20 EUR\n" +
+		"Kurs: 58,120000 EURProvision: 1,50 EUR\n" +
+		"Devisenkurs: 1,000000 Eigene Spesen: 0,90 EUR\n" +
+		"*Fremde Spesen: 3,00 EUR\n" +
+		"Gewinn/Verlust: 0,00 EUR**Einbeh. KESt: 0,25 EUR\n" +
+		"Endbetrag: -2.039,85 EUR\n" +
+		"* Enthalten sind folgende Gebühren: Courtage: 0,00 EUR\n" +
+		"Tradinggebühr: 0,50 EUR\n" +
+		"Regulierung: 2,50 EUR\n" +
+		"Schlussnoten: 0,00 EUR\n" +
+		"LS-Umlegung: 0,00 EUR\n" +
+		"Finanztransaktionssteuer: 0,00 EUR\n" +
+		"Sonstige: 0,00 EUR\n"
+	doc := &extractor.ExtractedDocument{Filename: "trade.pdf", Text: text, DocumentType: "TRADE"}
+
+	tx, err := parseTrade(doc)
+	if err != nil {
+		t.Fatalf("parseTrade failed: %v", err)
+	}
+	if tx.Costs == nil {
+		t.Fatal("expected a cost block, got nil")
+	}
+	if tx.Costs.Fees == nil {
+		t.Fatal("expected an itemised Gebühren breakdown, got nil")
+	}
+	checks := []struct {
+		name string
+		got  float64
+		want float64
+	}{
+		{"Provision", tx.Costs.Provision, 1.50},
+		{"Eigene Spesen", tx.Costs.OwnExpenses, 0.90},
+		{"Fremde Spesen", tx.Costs.ForeignExpenses, 3.00},
+		{"total", tx.Costs.Total, 5.40},
+		{"Tradinggebühr", tx.Costs.Fees.TradingFee, 0.50},
+		{"Regulierung", tx.Costs.Fees.Settlement, 2.50},
+		{"Courtage", tx.Costs.Fees.Courtage, 0.00},
+		{"Einbeh. KESt", tx.WithholdingTax, 0.25},
+		{"Endbetrag", tx.FinalAmount, -2039.85},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+	// The breakdown itemises Fremde Spesen; double-counting it would give 8.40.
+	sum := tx.Costs.Fees.Courtage + tx.Costs.Fees.TradingFee + tx.Costs.Fees.Settlement +
+		tx.Costs.Fees.ClosingNotes + tx.Costs.Fees.LSAllocation +
+		tx.Costs.Fees.FinancialTransactionTax + tx.Costs.Fees.Other
+	if sum != tx.Costs.ForeignExpenses {
+		t.Errorf("Gebühren sum to %v, want Fremde Spesen %v", sum, tx.Costs.ForeignExpenses)
+	}
+}
+
+// A document with no Provision line at all must leave Costs nil, so that
+// "flatex charged nothing" stays distinguishable from "this document type has
+// no charge block".
+func TestParseCostsAbsentBlockIsNil(t *testing.T) {
+	if c := extractCosts("Ertragsmitteilung\nEndbetrag : 22,43 EUR\n"); c != nil {
+		t.Errorf("expected nil cost block, got %+v", c)
+	}
+	c := extractCosts("Provision     :               0,00 EUR\n")
+	if c == nil {
+		t.Fatal("expected a cost block for a document with a Provision line")
+	}
+	if c.Total != 0 {
+		t.Errorf("total = %v, want 0", c.Total)
+	}
+	if c.Fees != nil {
+		t.Errorf("expected no Gebühren breakdown without its heading, got %+v", c.Fees)
+	}
+}
+
+// eurField and dateField must not cross a line break: a label whose value
+// column is blank has to yield nothing rather than capture the next line.
+func TestFieldHelpersStayOnTheirLine(t *testing.T) {
+	if got, err := eurField("Provision     :\nEndbetrag : 50,00 EUR\n", `Provision`); err == nil {
+		t.Errorf("eurField reached across the line break and returned %v", got)
+	}
+	if got := dateField("Handelstag\nValuta 17.09.2025\n", `Handelstag`); got != "" {
+		t.Errorf("dateField reached across the line break and returned %q", got)
 	}
 }

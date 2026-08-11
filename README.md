@@ -191,13 +191,29 @@ with depot metadata:
       "isin": "DE0005140008",
       "wkn": "514000",
       "date": "2024-06-15",
+      "order_date": "2024-06-13",
+      "value_date": "2024-06-17",
       "type": "BUY",
       "quantity": 10.0,
       "price": 25.50,
       "price_currency": "EUR",
       "gross_value": 255.00,
-      "provision": 5.50,
-      "final_amount": 248.50,
+      "costs": {
+        "provision": 5.50,
+        "own_expenses": 0,
+        "foreign_expenses": 3.00,
+        "total": 8.50,
+        "fees": {
+          "courtage": 0,
+          "trading_fee": 0.50,
+          "settlement": 2.50,
+          "closing_notes": 0,
+          "ls_allocation": 0,
+          "financial_transaction_tax": 0,
+          "other": 0
+        }
+      },
+      "final_amount": -263.50,
       "final_currency": "EUR"
     }
   ]

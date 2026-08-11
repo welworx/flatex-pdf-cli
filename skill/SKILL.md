@@ -62,8 +62,10 @@ Key fields (most are `omitempty`):
 | `security_name` | name when there is no ISIN (crypto) or for orders |
 | `order_number`, `transaction_number` | Auftragsnummer / Transaktion-Nr. |
 | `type` | `BUY` / `SELL` |
-| `date`, `value_date` | ISO `YYYY-MM-DD` |
-| `quantity`, `price`, `gross_value`, `provision`, `final_amount` | numbers (decimals normalized) |
+| `date` | ISO `YYYY-MM-DD`. Trade date (Handelstag/Schlusstag/Buchtag) for trades, Valuta for dividends and interest — **not** the letter date printed at the top of the page |
+| `order_date`, `value_date` | Auftragsdatum / Valuta, ISO `YYYY-MM-DD` |
+| `quantity`, `price`, `gross_value`, `final_amount` | numbers (decimals normalized); `final_amount` is negative for a buy |
+| `costs` | charge block — `provision`, `own_expenses`, `foreign_expenses`, `total`, and a `fees` itemisation of `foreign_expenses`. Absent when the document has no charge block; zeros inside it are real. Use `costs.total` as the transaction's cost — the `fees` entries are already part of it |
 | `limit`, `valid_until` | ORDER only |
 | `custody_type`, `depositary` | e.g. CRYPTO `Kryptoverwahrung` / `Tangany GmbH` |
 
