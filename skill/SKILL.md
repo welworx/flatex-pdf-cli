@@ -68,6 +68,7 @@ Key fields (most are `omitempty`):
 | `costs` | charge block — `provision`, `own_expenses`, `foreign_expenses`, `total`, and a `fees` itemisation of `foreign_expenses`. Absent when the document has no charge block; zeros inside it are real. Use `costs.total` as the transaction's cost — the `fees` entries are already part of it |
 | `limit`, `valid_until` | ORDER only |
 | `custody_type`, `depositary` | e.g. CRYPTO `Kryptoverwahrung` / `Tangany GmbH` |
+| `deposit_country` | Lagerland as an ISO 3166-1 alpha-2 code (`GB`); absent if the document names a country the translation table misses |
 
 `metadata` (with `-include-metadata`): `depot_number`, `depot_holder`, `account_number`.
 

@@ -17,7 +17,8 @@ var csvHeader = []string{
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
 	"fee_ls_allocation", "fee_financial_transaction_tax", "fee_other",
 	"withholding_tax", "gain_loss", "exchange_rate",
-	"final_amount", "final_currency", "custody_type", "depositary", "execution_venue",
+	"final_amount", "final_currency", "custody_type", "depositary", "deposit_country",
+	"execution_venue",
 	"limit", "valid_until", "distribution_per_share", "distribution_currency",
 	"gross_amount", "gross_currency", "withholding_tax_currency", "net_amount",
 	"net_currency", "ex_date", "value_date", "interest_rate", "period_from",
@@ -43,7 +44,7 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
 			formatFloat(t.WithholdingTax), formatFloat(t.GainLoss), formatFloat(t.ExchangeRate),
-			formatFloat(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.ExecutionVenue,
+			formatFloat(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
 			formatFloat(t.Limit), t.ValidUntil, formatFloat(t.DistributionPerShare), t.DistributionCurrency,
 			formatFloat(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloat(t.NetAmount),
 			t.NetCurrency, t.ExDate, t.ValueDate, formatFloat(t.InterestRate), t.PeriodFrom,

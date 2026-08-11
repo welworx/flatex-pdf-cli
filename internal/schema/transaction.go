@@ -68,6 +68,7 @@ type Transaction struct {
 	FinalCurrency  string  `json:"final_currency,omitempty"`
 	CustodyType    string  `json:"custody_type,omitempty"`
 	Depositary     string  `json:"depositary,omitempty"`
+	DepositCountry string  `json:"deposit_country,omitempty"` // Lagerland, as an ISO 3166-1 alpha-2 code
 	ExecutionVenue string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
 	Costs          *Costs  `json:"costs,omitempty"`
 

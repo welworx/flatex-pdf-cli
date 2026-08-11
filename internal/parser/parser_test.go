@@ -835,6 +835,7 @@ func TestAllFixturesParse(t *testing.T) {
 		date              string // txs[0].Date — the trade/value date, not the letter date
 		orderDate         string
 		valueDate         string
+		depositCountry    string
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
@@ -842,6 +843,7 @@ func TestAllFixturesParse(t *testing.T) {
 			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
 			// Letter date is 16.09.2025; Handelstag is 15.09.2025.
 			date: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
+			depositCountry: "GB",
 		},
 		{
 			file: "trade_sample_2.pdf", docType: "TRADE", wantTransactions: 1,
@@ -849,6 +851,8 @@ func TestAllFixturesParse(t *testing.T) {
 			depotNumber: "22000000021", depotHolder: "Beispiel, Erika",
 			// Auftragsdatum 28.01. and Valuta 03.02. straddle Handelstag 30.01.
 			date: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
+			// Lagerland runs into the next column in gxpdf's output here.
+			depositCountry: "GB",
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
@@ -912,6 +916,7 @@ func TestAllFixturesParse(t *testing.T) {
 				{"date", txs[0].Date, tc.date},
 				{"order date", txs[0].OrderDate, tc.orderDate},
 				{"value date", txs[0].ValueDate, tc.valueDate},
+				{"deposit country", txs[0].DepositCountry, tc.depositCountry},
 			} {
 				if d.want != "" && d.got != d.want {
 					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)

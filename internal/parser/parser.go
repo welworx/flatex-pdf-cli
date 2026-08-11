@@ -144,6 +144,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		FinalCurrency:     "EUR",
 		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		Depositary:        extractString(text, `Lagerstelle[^\S\n]*:[^\S\n]*([^\n*]+)`),
+		DepositCountry:    countryISO2(extractString(text, `Lagerland[^\S\n]*:[^\S\n]*([^\n*]+)`)),
 		ExecutionVenue:    executionVenue,
 		Costs:             extractCosts(text),
 	}

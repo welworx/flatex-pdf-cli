@@ -45,6 +45,7 @@ All extracted transactions are returned as JSON objects with the following struc
   "final_currency": "EUR",
   "custody_type": "Wertpapierrechnung",
   "depositary": "Clearstream Lux.",
+  "deposit_country": "GB",
   "execution_venue": "XETRA"
 }
 ```
@@ -98,6 +99,13 @@ For pure cash events with no trade — `DIVIDEND`, `INTEREST`,
 - `final_currency` — Currency of final amount
 - `custody_type` — Verwahrart, e.g. `Wertpapierrechnung`
 - `depositary` — Lagerstelle, e.g. `Clearstream Lux.`
+- `deposit_country` — Lagerland, translated to an ISO 3166-1 alpha-2 code
+  (`Großbritannien` → `GB`). Omitted when the document has no Lagerland or
+  names a country outside the translation table — the German name is never
+  passed through untranslated, because gxpdf runs the Lagerland column
+  straight into the one beside it (`GroßbritannienBemessungsgrundlage: 0,00
+  EUR`) and the country list is what separates them. Open an issue if a real
+  statement names a country the table misses.
 - `execution_venue` — Execution venue/type (Ausf.platz/-art), e.g. XETRA
 
 ## Costs
