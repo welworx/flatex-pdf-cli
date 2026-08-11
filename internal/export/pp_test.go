@@ -75,6 +75,72 @@ func TestWriteAccountTransactionsMapsTypes(t *testing.T) {
 	}
 }
 
+func TestValidLang(t *testing.T) {
+	for _, lang := range []string{"en", "de"} {
+		if !ValidLang(lang) {
+			t.Errorf("ValidLang(%q) = false, want true", lang)
+		}
+	}
+	for _, lang := range []string{"fr", "EN", "", "en-US"} {
+		if ValidLang(lang) {
+			t.Errorf("ValidLang(%q) = true, want false", lang)
+		}
+	}
+}
+
+// The two PP CSVs are disjoint: buy/sell documents belong in the portfolio
+// file and must never appear as cash-account rows.
+func TestWriteAccountTransactionsSkipsPortfolioDocumentTypes(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", GrossValue: 50},
+		{DocumentType: "CRYPTO", ISIN: "X", Date: "2024-06-16", Type: "BUY", FinalAmount: 100},
+		{DocumentType: "SAVINGSPLAN", ISIN: "Y", Date: "2024-06-17", Type: "BUY", GrossValue: 25},
+		{DocumentType: "ORDER", ISIN: "Z", Date: "2024-06-18"},
+	}
+
+	var buf bytes.Buffer
+	if err := WriteAccountTransactions(&buf, txns, "en"); err != nil {
+		t.Fatalf("WriteAccountTransactions failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected header only, got %d lines: %v", len(lines), lines)
+	}
+}
+
+func TestWriteAccountTransactionsUnknownLang(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteAccountTransactions(&buf, nil, "fr"); err == nil {
+		t.Fatal("expected error for unknown lang, got nil")
+	}
+}
+
+// The Note column carries the order number when there is one, falling back to
+// the transaction number, so a PP import can be traced back to the document.
+func TestNoteColumnPrefersOrderNumber(t *testing.T) {
+	txns := []*schema.Transaction{
+		{DocumentType: "TRADE", ISIN: "A", Date: "2024-06-15", Type: "BUY", OrderNumber: "ORD-1", TransactionNumber: "TXN-1"},
+		{DocumentType: "TRADE", ISIN: "B", Date: "2024-06-16", Type: "BUY", TransactionNumber: "TXN-2"},
+	}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected header + 2 rows, got %d: %v", len(lines), lines)
+	}
+	if !strings.HasSuffix(lines[1], "ORD-1") {
+		t.Errorf("expected order number in Note, got: %s", lines[1])
+	}
+	if !strings.HasSuffix(lines[2], "TXN-2") {
+		t.Errorf("expected transaction number fallback in Note, got: %s", lines[2])
+	}
+}
+
 func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15", Type: "SPLIT"}}
 

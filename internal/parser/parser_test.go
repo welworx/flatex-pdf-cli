@@ -53,6 +53,112 @@ func TestParseAccumulatingRouting(t *testing.T) {
 	}
 }
 
+// TestParseRoutesRemainingDocumentTypes covers the CRYPTO and ORDER branches of
+// the Parse dispatch table, which the per-parser tests reach directly and so
+// never exercised through Parse itself.
+//
+// These use synthetic text rather than testdata/krypto_sample_1.pdf and
+// testdata/orderbestaetigung_sample_1.pdf: redaction blanked the order numbers
+// in those two fixtures ("Nr. /1", a row with no leading Auftrags-Nr), so they
+// currently fail to parse and the CLI skips them.
+func TestParseRoutesRemainingDocumentTypes(t *testing.T) {
+	crypto := "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n" +
+		"Ihr Verwahrkonto bei Tangany GmbH: 44000000041\n" +
+		"Inhaber: Dr. Stefan Berger\n" +
+		"Nr.999000111/1    Kauf                           BITCOIN\n" +
+		"Ordervolumen: 0,014 St. Handelsplatz: Tradias\n" +
+		"davon ausgef.: 0,014 St. Schlusstag: 29.01.2026, 16:00 Uhr\n" +
+		"Kurs: 72.462,2200 EUR Kurswert: 1.014,47 EUR\n" +
+		"Devisenkurs: Provision: 5,07 EUR\n" +
+		"Bew-Faktor: 1,0000\n" +
+		"Verwahrart: Kryptoverwahrung\n" +
+		"Kryptoverwahrer: Tangany GmbH **Einbeh. Steuer: 0,00 EUR\n" +
+		"Gewinn/Verlust: 0,00 EUR\n" +
+		"Valuta: 30.01.2026 Endbetrag: -1.019,54 EUR\n" +
+		"** Transaktion-Nr.: 4400000044\n" +
+		"Die Verrechnung der Endbeträge erfolgt über Ihr Konto Nr.: 44000000042"
+
+	order := "Sammelauftragsbestätigung\n" +
+		"Ihre Depotnummer:33000000031\n" +
+		"Depotinhaber:Dr. Lukas Hofer\n" +
+		"Auftrags-Nr ISIN Bezeichnung Ausf.platz/-art\n" +
+		"WKN Geschäftsart/Auftr.DatumStücke/Nominale\n" +
+		"330000111 XFC000A2YY6Q BITCOIN Tradias\n" +
+		"992668 Kauf vom 28.01.2026 0,014 St.\n" +
+		"Gültig bis: 28.02.2026\n" +
+		"Limit: 72.500,000 EUR"
+
+	cases := []struct {
+		docType string
+		text    string
+	}{
+		{"CRYPTO", crypto},
+		{"ORDER", order},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.docType, func(t *testing.T) {
+			doc := &extractor.ExtractedDocument{
+				Filename:     strings.ToLower(tc.docType) + ".pdf",
+				Text:         tc.text,
+				DocumentType: tc.docType,
+			}
+
+			txs, err := Parse(doc)
+			if err != nil {
+				t.Fatalf("Parse failed to route %s: %v", tc.docType, err)
+			}
+			if len(txs) == 0 {
+				t.Fatalf("expected at least one %s transaction", tc.docType)
+			}
+			for i, tx := range txs {
+				if tx.DocumentType != tc.docType {
+					t.Errorf("txs[%d].DocumentType = %s, want %s", i, tx.DocumentType, tc.docType)
+				}
+			}
+		})
+	}
+}
+
+// An unrecognised document type must surface as an error; that is what lets a
+// batch run skip the file instead of emitting a silently empty result.
+func TestParseUnknownDocumentTypeErrors(t *testing.T) {
+	doc := &extractor.ExtractedDocument{
+		Filename:     "mystery.pdf",
+		Text:         "some flatex text",
+		DocumentType: "STEUERBESCHEINIGUNG",
+	}
+
+	txs, err := Parse(doc)
+	if err == nil {
+		t.Fatal("expected an error for an unknown document type, got nil")
+	}
+	if txs != nil {
+		t.Errorf("expected no transactions, got %d", len(txs))
+	}
+	if !strings.Contains(err.Error(), "STEUERBESCHEINIGUNG") {
+		t.Errorf("expected the error to name the document type, got: %v", err)
+	}
+}
+
+// one propagates a parser failure instead of wrapping a nil transaction into a
+// one-element slice.
+func TestParseSurfacesParserErrorForKnownType(t *testing.T) {
+	doc := &extractor.ExtractedDocument{
+		Filename:     "empty-crypto.pdf",
+		Text:         "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n",
+		DocumentType: "CRYPTO",
+	}
+
+	txs, err := Parse(doc)
+	if err == nil {
+		t.Fatal("expected an error from the CRYPTO parser, got nil")
+	}
+	if txs != nil {
+		t.Errorf("expected no transactions on error, got %d", len(txs))
+	}
+}
+
 // TestParseTradeBuy tests parsing a BUY trade confirmation.
 func TestParseTradeBuy(t *testing.T) {
 	text := "Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nAusführungsdatum : 15.06.2026"
