@@ -9,9 +9,36 @@ description: Use when turning real flatexDEGIRO broker PDFs (Kauf/Verkauf trade 
 
 Real flatex statements contain a customer's name, address, and account numbers. To use them as test fixtures, replace that PII with **synthetic** values while keeping the page visually identical.
 
-**Core technique:** redact the exact PII text rectangles, then re-insert synthetic text at the same position in a *base-14 font*. The original flatex PDFs use embedded Identity-H fonts (`HerosBFO`, `CursorBFO`) throughout — including PII fields. Base-14 substitutes (Helvetica, Courier) are visually similar but technically distinct; the PII fields will render in a slightly different font than the surrounding document. For parsing purposes this does not matter — positions, sizes, and structure are preserved. Do **not** try to reuse the embedded fonts — they are Identity-H subsets and silently produce wrong glyphs for any character not already in the subset.
+**Core technique:** redact the exact PII text rectangles, re-insert synthetic text at the same position in a *base-14 font*, then **reflow the content streams** (see below — skipping this produces a fixture that looks perfect and parses wrong). The original flatex PDFs use embedded Identity-H fonts (`HerosBFO`, `CursorBFO`) throughout — including PII fields. Base-14 substitutes (Helvetica, Courier) are visually similar but technically distinct; the PII fields will render in a slightly different font than the surrounding document. For parsing purposes this does not matter — positions, sizes, and structure are preserved. Do **not** try to reuse the embedded fonts — they are Identity-H subsets and silently produce wrong glyphs for any character not already in the subset.
 
-Tools: **PyMuPDF (`fitz`)** for redaction, **Presidio** to *identify* PII candidates. No new repo script — run inline.
+Tools: **PyMuPDF (`fitz`)** for redaction, **Presidio** to *identify* PII candidates, and `reflow.py` (in this directory) for the mandatory final pass.
+
+## The reflow step is not optional
+
+`page.insert_text()` and `add_redact_annot(text=...)` both **append** the replacement as a *new content stream* at the end of the page's `/Contents`. The page renders correctly, so a visual diff passes — but extractors that read in content-stream order rather than sorting geometrically see every replaced value drop out of its slot and reappear as a block of loose text at the bottom of the page.
+
+`flatex-pdf-cli` uses `gxpdf`, which reads in stream order. A fixture redacted without reflowing yields text like
+
+```
+Nr. /1    Kauf    BITCOIN          <- order number gone from its slot
+...
+440000111                          <- ...re-emerges 30 lines later
+```
+
+which silently breaks every parser anchored on an identifier (`Nr.<order>/N`, the 9-digit `Auftrags-Nr`), and makes `Depotinhaber:` capture the *following* line. All seven fixtures in this repo were once broken exactly this way.
+
+After redacting, always run:
+
+```python
+from reflow import reflow          # .claude/skills/redacting-flatex-pdfs/reflow.py
+
+doc = fitz.open(src)
+... redact and insert ...
+reflow(doc)                        # move appended text into reading order
+doc.save(out, garbage=4, deflate=True)
+```
+
+`reflow` moves each appended block to its reading-order position inside the main stream, carrying its white cover rectangle with it, and raises `ReflowError` rather than writing a half-edited stream. Rendering is unchanged (measured: <50 differing subpixels at 300 DPI, i.e. antialiasing on re-anchored glyphs).
 
 ## What to replace vs. keep
 
@@ -39,6 +66,11 @@ Assign a **different** persona per fixture so the corpus exercises titles, umlau
 | trade 2 | Frau / Erika Beispiel | Beispielweg 5, Stiege 4 Tür 11, 1020 Wien | 22000000021 / 22000000022 | 7000000022 / 800000022 |
 | dividend 1 | Herrn / Johann Österreicher | Lindengasse 8, Stiege 2 Tür 5, 1070 Wien | 33000000031 / 33000000032 | 7000000033 / — |
 | dividend 2 | Frau / Anna-Maria Gruber | Ahornstrasse 23, Stiege 7 Tür 3, 1150 Wien | 44000000041 / 44000000042 | 7000000044 / — |
+| sparplan 1 | Herrn / Dr. Klaus Bergmann | Bergmannsgasse 17, Stiege 5 Tür 3, 1050 Wien | 55000000051 / — | — / 0005500055 |
+| krypto 1 | Herrn / Dr. Stefan Berger | Ahornstrasse 23, Stiege 2 Tür 5, 1150 Wien | 44000000041 / 44000000042 | 4400000044 / 440000111 |
+| order 1 | Herrn / Dr. Lukas Hofer | Lindengasse 8, Stiege 1 Tür 2, 1070 Wien | 33000000031 / — | — / 330000111, 330000222 |
+
+The krypto and order fixtures currently reuse the dividend-2 and dividend-1 numbers respectively — an artefact of when they were redacted, not a deliberate choice. Give any *new* fixture its own block so a cross-fixture mix-up cannot hide a bug.
 
 Keep digit-string **lengths equal** to the originals so mono-column alignment is preserved. Umlauts (ä ö ü Ö) and hyphens are fine in both Helvetica and Courier (WinAnsi).
 
@@ -48,6 +80,7 @@ Keep digit-string **lengths equal** to the originals so mono-column alignment is
 
 ```python
 import fitz
+from reflow import reflow
 FONTMAP = {"CursorBFO-Regular":"cour","CursorBFO-Bold":"cobo",
            "HerosBFO-Regular":"helv","HerosBFO-Bold":"hebo","OfficinaSans":"helv"}
 def b14(f):
@@ -74,6 +107,7 @@ def redact(src, out, replacements):           # replacements: {old_text: synthet
         page.apply_redactions()
         for x, by, new, fn, sz in ins:
             page.insert_text((x, by), new, fontname=fn, fontsize=sz, color=(0,0,0))
+    reflow(doc)                                # mandatory; see above
     doc.save(out, garbage=4, deflate=True)
 ```
 
@@ -82,9 +116,13 @@ def redact(src, out, replacements):           # replacements: {old_text: synthet
 1. **Residual scan** — confirm no original token survives in the text:
    `"".join(p.get_text() for p in fitz.open(out))` must not contain any original name fragment or number.
 2. **Visual diff** — render before/after to PNG (`page.get_pixmap(dpi=200)`) and confirm layout + fonts match. Check the address block (Helvetica path) and a mono body line (Courier path) at high DPI.
+3. **Stream-order check** — the one that catches a missing reflow. `page.get_text()` (unsorted) must read the same as `page.get_text(sort=True)`. If a replaced value appears at the bottom of the unsorted text instead of in its slot, the reflow did not run or did not cover it.
+4. **Parse it** — `go test ./internal/parser/ -run TestAllFixturesParse`, or for a new file `flatex-pdf-cli -include-metadata <out.pdf>` and confirm every identifier (`order_number`, `transaction_number`, `depot_number`, `depot_holder`) is populated and correct. A visually perfect fixture that parses to empty identifiers is the exact failure this guards.
 
 ## Common mistakes
 
+- **Skipping the reflow pass** → the page renders perfectly and a pixel diff passes, but every replaced identifier is out of position in stream order, so `gxpdf` hands the parser blanks. Trusting a visual diff alone is what let this ship.
+- **Trusting `page.get_text()` to prove ordering** → it sorts geometrically by default in some call shapes and reflects true stream order in others. Compare sorted against unsorted, and confirm with the Go parser.
 - **Reusing embedded fonts** → Identity-H subsets can't map new Unicode; insertion silently falls back to Helvetica and the body text stops being monospaced. Always map to the base-14 clone.
 - **Changing digit-string length** → breaks the colon-aligned mono columns. Keep counts equal.
 - **Trying to re-insert rotated/vertical codes** → `insert_textbox(..., rotate=90)` often fails to fit and leaves a blank. Leave the barcode/postal codes alone.

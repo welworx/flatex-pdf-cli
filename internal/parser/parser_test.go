@@ -57,10 +57,8 @@ func TestParseAccumulatingRouting(t *testing.T) {
 // the Parse dispatch table, which the per-parser tests reach directly and so
 // never exercised through Parse itself.
 //
-// These use synthetic text rather than testdata/krypto_sample_1.pdf and
-// testdata/orderbestaetigung_sample_1.pdf: redaction blanked the order numbers
-// in those two fixtures ("Nr. /1", a row with no leading Auftrags-Nr), so they
-// currently fail to parse and the CLI skips them.
+// These use synthetic text to keep the dispatch assertions independent of the
+// PDF fixtures; TestAllFixturesParse covers the real files end to end.
 func TestParseRoutesRemainingDocumentTypes(t *testing.T) {
 	crypto := "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n" +
 		"Ihr Verwahrkonto bei Tangany GmbH: 44000000041\n" +
@@ -810,4 +808,90 @@ func TestParseSavingsPlanMissingRequiredFields(t *testing.T) {
 			t.Error("expected error when no table rows match, got nil")
 		}
 	})
+}
+
+// TestAllFixturesParse runs every committed PDF fixture through the real
+// extract-and-parse path and checks the identifiers that redaction is most
+// likely to disturb.
+//
+// The values it asserts are the ones a PDF writer can silently move: PyMuPDF
+// appends replacement text as a new content stream, so a re-redacted fixture
+// renders correctly while every replaced identifier drops out of its slot in
+// stream order. That failure is invisible to a test built on synthetic text,
+// which is why this one reads the files.
+func TestAllFixturesParse(t *testing.T) {
+	cases := []struct {
+		file              string
+		docType           string
+		wantTransactions  int
+		orderNumber       string
+		transactionNumber string
+		depotNumber       string
+		depotHolder       string
+	}{
+		{
+			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "700000011/1", transactionNumber: "7000000011",
+			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
+		},
+		{
+			file: "trade_sample_2.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "800000022/1", transactionNumber: "7000000022",
+			depotNumber: "22000000021", depotHolder: "Beispiel, Erika",
+		},
+		{
+			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
+			orderNumber: "440000111/1", transactionNumber: "4400000044",
+		},
+		{
+			file: "orderbestaetigung_sample_1.pdf", docType: "ORDER", wantTransactions: 2,
+			orderNumber: "330000111",
+			depotNumber: "33000000031", depotHolder: "Dr. Lukas Hofer",
+		},
+		{
+			file: "dividend_sample_1.pdf", docType: "DIVIDEND", wantTransactions: 1,
+			depotNumber: "33000000031", depotHolder: "Österreicher, Johann",
+		},
+		{
+			file: "dividend_sample_2.pdf", docType: "DIVIDEND", wantTransactions: 1,
+			depotNumber: "44000000041", depotHolder: "Gruber, Anna-Maria",
+		},
+		{
+			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
+			depotNumber: "55000000051",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.file, func(t *testing.T) {
+			doc, err := extractor.ExtractPDF("../../testdata/" + tc.file)
+			if err != nil {
+				t.Fatalf("ExtractPDF: %v", err)
+			}
+			if doc.DocumentType != tc.docType {
+				t.Errorf("document type = %q, want %q", doc.DocumentType, tc.docType)
+			}
+			if tc.depotNumber != "" && doc.DepotNumber != tc.depotNumber {
+				t.Errorf("depot number = %q, want %q", doc.DepotNumber, tc.depotNumber)
+			}
+			if tc.depotHolder != "" && doc.DepotHolder != tc.depotHolder {
+				t.Errorf("depot holder = %q, want %q", doc.DepotHolder, tc.depotHolder)
+			}
+
+			txs, err := Parse(doc)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(txs) != tc.wantTransactions {
+				t.Fatalf("got %d transactions, want %d", len(txs), tc.wantTransactions)
+			}
+			if tc.orderNumber != "" && txs[0].OrderNumber != tc.orderNumber {
+				t.Errorf("order number = %q, want %q", txs[0].OrderNumber, tc.orderNumber)
+			}
+			if tc.transactionNumber != "" && txs[0].TransactionNumber != tc.transactionNumber {
+				t.Errorf("transaction number = %q, want %q",
+					txs[0].TransactionNumber, tc.transactionNumber)
+			}
+		})
+	}
 }

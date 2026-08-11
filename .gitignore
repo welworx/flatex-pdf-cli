@@ -25,6 +25,9 @@ flatex-pdf-cli-test
 # Go
 /vendor/
 
+# Python (redaction skill tooling)
+__pycache__/
+
 sensitive_test_docs/
 
 # Superpowers (internal development/planning docs)
