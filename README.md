@@ -30,6 +30,8 @@ turns them into structured data.
 
 - **Seven document types** — trades, dividends, interest, accumulating funds, orders, crypto settlements, savings plans
 - **Three output formats** — JSON, CSV, and Portfolio Performance import files (English or German)
+- **Every charge, itemised** — Provision, Eigene/Fremde Spesen and the full Gebühren breakdown (Courtage, Tradinggebühr, Regulierung, …), plus a ready-to-use total
+- **Unambiguous dates** — trade date, order date and value date are separate fields, not one guess
 - **Batch processing** — single PDFs or whole directory trees; one bad file never aborts the batch
 - **Depot metadata & audit trail** — optionally include depot number/holder and per-transaction source filename
 - **AI-agent ready** — ships a Claude Code skill so coding agents can drive the CLI
@@ -214,11 +216,29 @@ with depot metadata:
         }
       },
       "final_amount": -263.50,
-      "final_currency": "EUR"
+      "final_currency": "EUR",
+      "custody_type": "Wertpapierrechnung",
+      "depositary": "Clearstream Lux.",
+      "deposit_country": "GB",
+      "execution_venue": "XETRA"
     }
   ]
 }
 ```
+
+Two things worth knowing before you use the numbers:
+
+- **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
+  crypto and savings plans) — not the date printed at the top of the letter.
+  `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
+  alongside it, and on a real statement all three are usually different days.
+  Dividends and interest use `Valuta` as their `date`, since that is when the
+  money moves.
+- **`costs.total` is the transaction's total charge** — `Provision` plus
+  `Eigene Spesen` plus `Fremde Spesen`. The entries under `costs.fees` itemise
+  `foreign_expenses` and are already counted in the total; adding them on top
+  double-counts. `costs` is absent when a document has no charge block at all,
+  which is how a real 0,00 EUR fee stays distinguishable from an unparsed one.
 
 Full field reference (common, trade, dividend, interest, accumulating, order,
 and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
@@ -245,6 +265,13 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
   work around a page-break run-on in text extraction; non-standard lengths won't
   match. (The depot number is matched at any length.)
 - **SAVINGSPLAN WKN** is not present in Sammelabrechnung documents; the `wkn` field will be empty for these transactions.
+- **`deposit_country` covers a fixed country list.** `Lagerland` is translated
+  from its German name to an ISO 3166-1 alpha-2 code against a built-in table.
+  gxpdf runs that column straight into the next one
+  (`"GroßbritannienBemessungsgrundlage: 0,00 EUR"`), so matching a known name
+  is also what separates the two — a country outside the table yields no code
+  rather than a half-captured string. Please open an issue if a real statement
+  names one the table misses.
 
 Additional document types (e.g. tax reports) will be added as samples become available.
 
