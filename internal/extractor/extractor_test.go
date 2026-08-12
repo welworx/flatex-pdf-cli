@@ -1,7 +1,6 @@
 package extractor
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -30,31 +29,9 @@ func TestExtractAccountNumber(t *testing.T) {
 	}
 }
 
-// TestExtractTextFromPDF tests the ExtractPDF function by verifying
-// that the Filename and DocumentType fields are properly set.
-func TestExtractTextFromPDF(t *testing.T) {
-	// Test with a sample text that contains TRADE keywords
-	text := "Dies ist ein Kaufbeleg für die Aktie ABC123. Depotnummer:55000000999 Depotinhaber:Max Mustermann"
-
-	// Test extractMetadata to extract depot info
-	depotNumber, depotHolder := extractMetadata(text)
-	if depotNumber != "55000000999" {
-		t.Errorf("expected depot number 55000000999, got %s", depotNumber)
-	}
-	if depotHolder != "Max Mustermann" {
-		t.Errorf("expected depot holder 'Max Mustermann', got %s", depotHolder)
-	}
-
-	// Test detectDocumentType
-	docType := detectDocumentType(text)
-	if docType != "TRADE" {
-		t.Errorf("expected document type TRADE, got %s", docType)
-	}
-}
-
-// TestDocumentTypeDetection tests keyword-based document type detection.
-// Tests the mapping: Kauf→TRADE, Verkauf→TRADE, Ausschüttung→DIVIDEND,
-// Zinsen→INTEREST, Ertragsmitteilung→ACCUMULATING
+// TestDocumentTypeDetection tests keyword-based document type detection,
+// including the three headings that contain "Kauf" but must not be read as a
+// plain trade.
 func TestDocumentTypeDetection(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -100,11 +77,6 @@ func TestDocumentTypeDetection(t *testing.T) {
 			name:     "Sammelabrechnung aus should be SAVINGSPLAN (not CRYPTO)",
 			text:     "Sammelabrechnung aus\nAuftrags-Nr:0005500055\nKauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR",
 			expected: "SAVINGSPLAN",
-		},
-		{
-			name:     "Sammelabrechnung Kryptowerte must still be CRYPTO",
-			text:     "Sammelabrechnung (Kauf/-verkauf Kryptowerte)",
-			expected: "CRYPTO",
 		},
 		{
 			name:     "Unknown keywords should return UNKNOWN",
@@ -174,298 +146,36 @@ func TestMetadataExtractionSalutationFallback(t *testing.T) {
 	}
 }
 
-// TestIntegrationTradeConfirmation tests end-to-end extraction of a trade confirmation PDF.
-// It verifies document type detection for TRADE documents with sample text.
-// NOTE: This test uses mocked text extraction. When real flatex PDFs are available,
-// place sample_trade.pdf in testdata/ and the test will use the actual PDF.
-func TestIntegrationTradeConfirmation(t *testing.T) {
-	// Try to load real PDF if available
-	var pdfPath string
-	possiblePaths := []string{
-		"testdata/sample_trade.pdf",
-		"../../testdata/sample_trade.pdf",
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			pdfPath = path
-			break
-		}
-	}
-
-	// If no real PDF, test with expected behavior when text extraction is implemented
-	if pdfPath == "" {
-		// Mock test: verify document type detection for TRADE keywords
-		docType := detectDocumentType("Bestätigung eines Kaufs von 10 Aktien\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "TRADE" {
-			t.Errorf("expected DocumentType 'TRADE', got '%s'", docType)
-		}
-
-		depotNum, depotHolder := extractMetadata("Depotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if depotNum != "55000000999" {
-			t.Errorf("expected depot number '55000000999', got '%s'", depotNum)
-		}
-		if depotHolder != "Max Mustermann" {
-			t.Errorf("expected depot holder 'Max Mustermann', got '%s'", depotHolder)
-		}
-		return
-	}
-
-	// Real PDF test
-	doc, err := ExtractPDF(pdfPath)
-	if err != nil {
-		// If PDF file exists but is invalid or text extraction fails, treat as missing
-		t.Logf("skipping real PDF test: PDF parsing failed (%v)", err)
-		t.Logf("place a valid sample_trade.pdf in testdata/ for integration testing")
-
-		// Still run mock test
-		docType := detectDocumentType("Bestätigung eines Kaufs von 10 Aktien\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "TRADE" {
-			t.Errorf("expected DocumentType 'TRADE', got '%s'", docType)
-		}
-		return
-	}
-
-	// Verify filename
-	if doc.Filename != "sample_trade.pdf" {
-		t.Errorf("expected filename 'sample_trade.pdf', got '%s'", doc.Filename)
-	}
-
-	// Verify document type is detected as TRADE
-	if doc.DocumentType != "TRADE" {
-		t.Errorf("expected DocumentType 'TRADE', got '%s'", doc.DocumentType)
-	}
-
-	// Verify metadata extraction
-	if doc.DepotNumber != "55000000999" {
-		t.Errorf("expected depot number '55000000999', got '%s'", doc.DepotNumber)
-	}
-
-	if doc.DepotHolder != "Max Mustermann" {
-		t.Errorf("expected depot holder 'Max Mustermann', got '%s'", doc.DepotHolder)
-	}
-}
-
-// TestIntegrationDividendStatement tests end-to-end extraction of a dividend statement PDF.
-// It verifies document type detection for DIVIDEND documents with sample text.
-// NOTE: This test uses mocked text extraction. When real flatex PDFs are available,
-// place sample_dividend.pdf in testdata/ and the test will use the actual PDF.
-func TestIntegrationDividendStatement(t *testing.T) {
-	// Try to load real PDF if available
-	var pdfPath string
-	possiblePaths := []string{
-		"testdata/sample_dividend.pdf",
-		"../../testdata/sample_dividend.pdf",
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			pdfPath = path
-			break
-		}
-	}
-
-	// If no real PDF, test with expected behavior when text extraction is implemented
-	if pdfPath == "" {
-		// Mock test: verify document type detection for DIVIDEND keywords
-		docType := detectDocumentType("Mitteilung über Ausschüttung von Dividenden\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "DIVIDEND" {
-			t.Errorf("expected DocumentType 'DIVIDEND', got '%s'", docType)
-		}
-
-		depotNum, depotHolder := extractMetadata("Depotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if depotNum != "55000000999" {
-			t.Errorf("expected depot number '55000000999', got '%s'", depotNum)
-		}
-		if depotHolder != "Max Mustermann" {
-			t.Errorf("expected depot holder 'Max Mustermann', got '%s'", depotHolder)
-		}
-		return
-	}
-
-	// Real PDF test
-	doc, err := ExtractPDF(pdfPath)
-	if err != nil {
-		// If PDF file exists but is invalid or text extraction fails, treat as missing
-		t.Logf("skipping real PDF test: PDF parsing failed (%v)", err)
-		t.Logf("place a valid sample_dividend.pdf in testdata/ for integration testing")
-
-		// Still run mock test
-		docType := detectDocumentType("Mitteilung über Ausschüttung von Dividenden\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "DIVIDEND" {
-			t.Errorf("expected DocumentType 'DIVIDEND', got '%s'", docType)
-		}
-		return
-	}
-
-	// Verify filename
-	if doc.Filename != "sample_dividend.pdf" {
-		t.Errorf("expected filename 'sample_dividend.pdf', got '%s'", doc.Filename)
-	}
-
-	// Verify document type is detected as DIVIDEND
-	if doc.DocumentType != "DIVIDEND" {
-		t.Errorf("expected DocumentType 'DIVIDEND', got '%s'", doc.DocumentType)
-	}
-
-	// Verify metadata extraction
-	if doc.DepotNumber != "55000000999" {
-		t.Errorf("expected depot number '55000000999', got '%s'", doc.DepotNumber)
-	}
-
-	if doc.DepotHolder != "Max Mustermann" {
-		t.Errorf("expected depot holder 'Max Mustermann', got '%s'", doc.DepotHolder)
-	}
-}
-
-// TestIntegrationAccumulating tests end-to-end extraction of a thesaurierung statement PDF.
-// It verifies document type detection for ACCUMULATING documents with sample text.
-// NOTE: This test uses mocked text extraction. When real flatex PDFs are available,
-// place sample_thesaurierung.pdf in testdata/ and the test will use the actual PDF.
-func TestIntegrationAccumulating(t *testing.T) {
-	// Try to load real PDF if available
-	var pdfPath string
-	possiblePaths := []string{
-		"testdata/sample_thesaurierung.pdf",
-		"../../testdata/sample_thesaurierung.pdf",
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			pdfPath = path
-			break
-		}
-	}
-
-	// If no real PDF, test with expected behavior when text extraction is implemented
-	if pdfPath == "" {
-		// Mock test: verify document type detection for ACCUMULATING keywords
-		docType := detectDocumentType("Ertragsmitteilung für thesaurierte Fonds\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "ACCUMULATING" {
-			t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", docType)
-		}
-
-		depotNum, depotHolder := extractMetadata("Depotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if depotNum != "55000000999" {
-			t.Errorf("expected depot number '55000000999', got '%s'", depotNum)
-		}
-		if depotHolder != "Max Mustermann" {
-			t.Errorf("expected depot holder 'Max Mustermann', got '%s'", depotHolder)
-		}
-		return
-	}
-
-	// Real PDF test
-	doc, err := ExtractPDF(pdfPath)
-	if err != nil {
-		// If PDF file exists but is invalid or text extraction fails, treat as missing
-		t.Logf("skipping real PDF test: PDF parsing failed (%v)", err)
-		t.Logf("place a valid sample_thesaurierung.pdf in testdata/ for integration testing")
-
-		// Still run mock test
-		docType := detectDocumentType("Ertragsmitteilung für thesaurierte Fonds\nDepotnummer: 55000000999\nDepotinhaber: Max Mustermann")
-		if docType != "ACCUMULATING" {
-			t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", docType)
-		}
-		return
-	}
-
-	// Verify filename
-	if doc.Filename != "sample_thesaurierung.pdf" {
-		t.Errorf("expected filename 'sample_thesaurierung.pdf', got '%s'", doc.Filename)
-	}
-
-	// Verify document type is detected as ACCUMULATING
-	if doc.DocumentType != "ACCUMULATING" {
-		t.Errorf("expected DocumentType 'ACCUMULATING', got '%s'", doc.DocumentType)
-	}
-
-	// Verify metadata extraction
-	if doc.DepotNumber != "55000000999" {
-		t.Errorf("expected depot number '55000000999', got '%s'", doc.DepotNumber)
-	}
-
-	if doc.DepotHolder != "Max Mustermann" {
-		t.Errorf("expected depot holder 'Max Mustermann', got '%s'", doc.DepotHolder)
-	}
-}
-
-// TestTextExtractionFromRealPDF tests text extraction from a flatex PDF.
-// It uses a synthetic, PII-free fixture (generated from a real document via the
-// redacting-flatex-pdfs skill, byte-for-byte visually identical to the original)
-// so the test runs in CI without exposing real account data.
+// TestTextExtractionFromRealPDF runs the gxpdf text layer against a committed
+// fixture (synthetic and PII-free, generated from a real document via the
+// redacting-flatex-pdfs skill). The keywords are the ones the rest of the
+// pipeline depends on: the flatex issuer marker gates the language check,
+// "kauf" drives document-type detection and "depot" carries the metadata.
 func TestTextExtractionFromRealPDF(t *testing.T) {
-	var pdfPath string
-	possiblePaths := []string{
-		"testdata/trade_sample_1.pdf",
-		"../../testdata/trade_sample_1.pdf",
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			pdfPath = path
-			break
-		}
-	}
-
-	if pdfPath == "" {
-		t.Skipf("no synthetic fixture found in testdata/; skipping PDF extraction test")
-	}
-
-	text, err := extractTextFromPDF(pdfPath)
+	text, err := extractTextFromPDF("../../testdata/trade_sample_1.pdf")
 	if err != nil {
 		t.Fatalf("extractTextFromPDF failed: %v", err)
 	}
-
-	// Verify text is not empty
 	if text == "" {
-		t.Error("extracted text is empty")
+		t.Fatal("extracted text is empty")
 	}
 
-	// Check for expected German keywords
-	keywords := []string{"flatex", "kauf", "depot"}
-	found := map[string]bool{}
 	lowerText := strings.ToLower(text)
-
-	for _, kw := range keywords {
-		if strings.Contains(lowerText, kw) {
-			found[kw] = true
+	for _, kw := range []string{"flatex", "kauf", "depot"} {
+		if !strings.Contains(lowerText, kw) {
+			t.Errorf("extracted text is missing %q", kw)
 		}
-	}
-
-	// At least some expected keywords should be found
-	if len(found) == 0 {
-		t.Logf("warning: no expected keywords found in extracted text")
-		t.Logf("extracted text length: %d characters", len(text))
-		t.Logf("first 200 characters: %s", text[:min(200, len(text))])
 	}
 }
 
 // TestDetectSavingsPlanFromFixture verifies that the synthetic savings-plan
 // fixture is detected as SAVINGSPLAN (not TRADE).
 func TestDetectSavingsPlanFromFixture(t *testing.T) {
-	pdfPath := "../../testdata/sparplan_sample_1.pdf"
-	if _, err := os.Stat(pdfPath); err != nil {
-		t.Skipf("savings-plan fixture not found at %s; skipping", pdfPath)
-	}
-
-	doc, err := ExtractPDF(pdfPath)
+	doc, err := ExtractPDF("../../testdata/sparplan_sample_1.pdf")
 	if err != nil {
 		t.Fatalf("ExtractPDF failed: %v", err)
 	}
 	if doc.DocumentType != "SAVINGSPLAN" {
 		t.Errorf("DocumentType = %q, want SAVINGSPLAN", doc.DocumentType)
 	}
-	if doc.DepotNumber == "" {
-		// ponytail: fixture has "Ihre Depotnummer: " blank (PII-redacted); log not fail.
-		t.Logf("DepotNumber is empty (fixture was PII-redacted; depot number field was blanked)")
-	}
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

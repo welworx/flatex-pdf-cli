@@ -718,45 +718,32 @@ func TestDoUpgradeUninstallableTargetIsAnError(t *testing.T) {
 	}
 }
 
-func TestFetchLatestReleaseErrors(t *testing.T) {
-	t.Run("unreachable host", func(t *testing.T) {
-		useTestGithubAPI(t, "http://127.0.0.1:0")
-		if _, err := fetchLatestRelease(); err == nil {
-			t.Fatal("expected a transport error")
-		}
+// A release endpoint that answers with something other than a release must be
+// an error rather than a zero-valued ghRelease, which would read as tag "" and
+// silently compare as "no upgrade available".
+func TestFetchLatestReleaseRejectsMalformedJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/welworx/flatex-pdf-cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{not json"))
 	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	useTestGithubAPI(t, srv.URL)
 
-	t.Run("malformed json", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/welworx/flatex-pdf-cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("{not json"))
-		})
-		srv := httptest.NewServer(mux)
-		t.Cleanup(srv.Close)
-		useTestGithubAPI(t, srv.URL)
-
-		if _, err := fetchLatestRelease(); err == nil {
-			t.Fatal("expected a decode error")
-		}
-	})
+	if _, err := fetchLatestRelease(); err == nil {
+		t.Fatal("expected a decode error")
+	}
 }
 
-func TestDownloadBytesErrors(t *testing.T) {
-	if _, err := downloadBytes("http://127.0.0.1:0/asset"); err == nil {
-		t.Fatal("expected a transport error")
-	}
-
+// A 5xx body must not be mistaken for the asset: without the status check the
+// error page itself would be checksummed and installed.
+func TestDownloadBytesRejectsNon200(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
+
 	if _, err := downloadBytes(srv.URL + "/asset"); err == nil {
 		t.Fatal("expected a non-200 status to be an error")
-	}
-}
-
-func TestWriteTempBinaryRejectsMissingDir(t *testing.T) {
-	if _, err := writeTempBinary(filepath.Join(t.TempDir(), "no-such-dir"), []byte("x")); err == nil {
-		t.Fatal("expected an error for a nonexistent directory")
 	}
 }

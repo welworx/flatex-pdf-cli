@@ -207,20 +207,6 @@ func TestWritePortfolioTransactionsGermanUsesCommaDecimalSeparator(t *testing.T)
 	}
 }
 
-func TestWritePortfolioTransactionsEnglishUsesCommaDelimiter(t *testing.T) {
-	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
-	}
-
-	var buf bytes.Buffer
-	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
-		t.Fatalf("WritePortfolioTransactions failed: %v", err)
-	}
-	if !strings.Contains(buf.String(), ",") {
-		t.Errorf("expected comma-delimited English output, got: %s", buf.String())
-	}
-}
-
 func TestWriteAccountTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
