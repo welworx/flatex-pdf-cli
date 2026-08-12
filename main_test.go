@@ -322,6 +322,23 @@ func TestPrintVersionFallsBackToDev(t *testing.T) {
 	}
 }
 
+func TestDiscoverPDFsMissingPathIsAnError(t *testing.T) {
+	if _, err := discoverPDFs(filepath.Join(t.TempDir(), "no-such-dir")); err == nil {
+		t.Fatal("expected an error for a nonexistent path")
+	}
+}
+
+// -format pp writes two derived files; a failure on the first must be
+// reported rather than swallowed on the way to writing the second.
+func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "no-such-dir", "out.csv")
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+
+	if err := writeOutput("pp", out, "en", txns, nil, false); err == nil {
+		t.Fatal("expected an error writing into a nonexistent directory")
+	}
+}
+
 func TestWriteOutputPPFormatGermanLang(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
