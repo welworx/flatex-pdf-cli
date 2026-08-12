@@ -479,8 +479,271 @@ func TestVerifyChecksum(t *testing.T) {
 	}
 }
 
+func TestVersionNewerPropagatesParseErrors(t *testing.T) {
+	if _, err := versionNewer("nonsense", "v1.0.0"); err == nil {
+		t.Error("expected an error for a malformed current version")
+	}
+	if _, err := versionNewer("v1.0.0", "nonsense"); err == nil {
+		t.Error("expected an error for a malformed latest version")
+	}
+}
+
 func TestRunUpgradeUnknownFlag(t *testing.T) {
 	if got := runUpgrade([]string{"-bogus"}); got != 2 {
 		t.Fatalf("runUpgrade(-bogus) = %d, want 2", got)
+	}
+}
+
+// setVersion swaps the build-injected version global for the duration of a
+// test, so runUpgrade's "dev build" and "tagged release" paths can both be
+// exercised.
+func setVersion(t *testing.T, v string) {
+	t.Helper()
+	orig := version
+	version = v
+	t.Cleanup(func() { version = orig })
+}
+
+// An unset version means a source build, which is always treated as
+// upgradable regardless of what the latest tag is.
+func TestRunUpgradeCheckOnDevBuildReportsAvailable(t *testing.T) {
+	srv, _ := newUpgradeTestServer(t, "v9.9.9", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	setVersion(t, "")
+
+	var got int
+	stdout, stderr := captureStd(t, func() { got = runUpgrade([]string{"-check"}) })
+	if got != 1 {
+		t.Fatalf("runUpgrade(-check) = %d, want 1 (upgrade available); stderr=%q", got, stderr)
+	}
+	if !strings.Contains(stdout, "dev -> v9.9.9") {
+		t.Fatalf("stdout = %q, want a dev -> v9.9.9 report", stdout)
+	}
+}
+
+// Without -check, runUpgrade has to resolve the running binary's own path
+// before it can install over it. Serving an *older* tag than the current
+// version exercises that resolution and then stops at "up to date", so the
+// test binary is never actually written to.
+func TestRunUpgradeResolvesRunningBinaryWhenNotChecking(t *testing.T) {
+	srv, hits := newUpgradeTestServer(t, "v0.1.0", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	setVersion(t, "v9.9.9")
+
+	var got int
+	stdout, stderr := captureStd(t, func() { got = runUpgrade([]string{"-y"}) })
+	if got != 0 {
+		t.Fatalf("runUpgrade(-y) = %d, want 0; stdout=%q stderr=%q", got, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "up to date (v9.9.9)") {
+		t.Fatalf("stdout = %q, want an up-to-date report", stdout)
+	}
+	if hits.hasPrefix("/download/") {
+		t.Fatal("an up-to-date check must not download anything")
+	}
+}
+
+// Answering anything other than "y" leaves the installed binary alone, and
+// must do so before any bytes are fetched.
+func TestDoUpgradeDeclinedAtPrompt(t *testing.T) {
+	srv, hits := newUpgradeTestServer(t, "v0.2.0", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	target := writeScratchExecutable(t, "old binary")
+	redirectStdin(t, "n\n")
+
+	var got int
+	stdout, stderr := captureStd(t, func() { got = doUpgrade(false, false, target, "v0.1.0") })
+	if got != 0 {
+		t.Fatalf("declined upgrade = %d, want 0; stderr=%q", got, stderr)
+	}
+	if !strings.Contains(stdout, "aborted") {
+		t.Fatalf("stdout = %q, want %q", stdout, "aborted")
+	}
+	if hits.hasPrefix("/download/") {
+		t.Fatal("declining the prompt must not download anything")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "old binary" {
+		t.Fatal("target modified after the upgrade was declined")
+	}
+}
+
+// A prompt that can't be read (stdin closed, e.g. a non-interactive shell
+// without -y) is an error, not an implicit yes.
+func TestDoUpgradeUnreadablePromptIsAnError(t *testing.T) {
+	srv, _ := newUpgradeTestServer(t, "v0.2.0", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	target := writeScratchExecutable(t, "old binary")
+	redirectStdin(t, "")
+
+	var got int
+	_, stderr := captureStd(t, func() { got = doUpgrade(false, false, target, "v0.1.0") })
+	if got != 1 {
+		t.Fatalf("doUpgrade with unreadable stdin = %d, want 1; stderr=%q", got, stderr)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "old binary" {
+		t.Fatal("target modified despite an unreadable prompt")
+	}
+}
+
+// Without SHA256SUMS.txt there is nothing to verify the download against, so
+// the upgrade must refuse rather than install unverified bytes.
+func TestDoUpgradeReleaseWithoutChecksumsFile(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/welworx/flatex-pdf-cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(ghRelease{
+			TagName: "v0.2.0",
+			Assets:  []ghAsset{{Name: platformAssetName(), BrowserDownloadURL: "http://unused.invalid/asset"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	useTestGithubAPI(t, srv.URL)
+	target := writeScratchExecutable(t, "unchanged")
+
+	var got int
+	_, stderr := captureStd(t, func() { got = doUpgrade(false, true, target, "v0.1.0") })
+	if got != 1 {
+		t.Fatalf("doUpgrade = %d, want 1", got)
+	}
+	if !strings.Contains(stderr, "SHA256SUMS.txt") {
+		t.Fatalf("stderr = %q, want it to name the missing SHA256SUMS.txt", stderr)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "unchanged" {
+		t.Fatal("target modified despite the missing checksums file")
+	}
+}
+
+func TestDoUpgradeMalformedCurrentVersionIsAnError(t *testing.T) {
+	srv, _ := newUpgradeTestServer(t, "v0.2.0", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	target := writeScratchExecutable(t, "unchanged")
+
+	var got int
+	_, stderr := captureStd(t, func() { got = doUpgrade(false, true, target, "not-a-version") })
+	if got != 1 {
+		t.Fatalf("doUpgrade = %d, want 1", got)
+	}
+	if !strings.Contains(stderr, "not-a-version") {
+		t.Fatalf("stderr = %q, want it to quote the unparseable version", stderr)
+	}
+}
+
+// newUpgradeTestServerBrokenDownloads serves a well-formed release whose
+// asset URLs 404. With binOK the platform binary downloads fine and only the
+// checksums file is broken, so each download call site can be failed
+// independently.
+func newUpgradeTestServerBrokenDownloads(t *testing.T, binOK bool) *httptest.Server {
+	t.Helper()
+	assetName := platformAssetName()
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/repos/welworx/flatex-pdf-cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(ghRelease{
+			TagName: "v0.2.0",
+			Assets: []ghAsset{
+				{Name: assetName, BrowserDownloadURL: srv.URL + "/download/" + assetName},
+				{Name: "SHA256SUMS.txt", BrowserDownloadURL: srv.URL + "/download/SHA256SUMS.txt"},
+			},
+		})
+	})
+	if binOK {
+		mux.HandleFunc("/download/"+assetName, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("new binary"))
+		})
+	}
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestDoUpgradeDownloadFailures(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		binOK bool
+	}{
+		{"binary download fails", false},
+		{"checksums download fails", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv := newUpgradeTestServerBrokenDownloads(t, c.binOK)
+			useTestGithubAPI(t, srv.URL)
+			target := writeScratchExecutable(t, "unchanged")
+
+			var got int
+			_, stderr := captureStd(t, func() { got = doUpgrade(false, true, target, "v0.1.0") })
+			if got != 1 {
+				t.Fatalf("doUpgrade = %d, want 1; stderr=%q", got, stderr)
+			}
+			data, err := os.ReadFile(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != "unchanged" {
+				t.Fatal("target modified despite a failed download")
+			}
+			assertNoLeftoverFiles(t, target)
+		})
+	}
+}
+
+// A verified download that can't be installed (target directory gone) must
+// surface the error rather than report success.
+func TestDoUpgradeUninstallableTargetIsAnError(t *testing.T) {
+	srv, _ := newUpgradeTestServer(t, "v0.2.0", []byte("new binary"), false)
+	useTestGithubAPI(t, srv.URL)
+	target := filepath.Join(t.TempDir(), "no-such-dir", "flatex-pdf-cli")
+
+	var got int
+	stdout, stderr := captureStd(t, func() { got = doUpgrade(false, true, target, "v0.1.0") })
+	if got != 1 {
+		t.Fatalf("doUpgrade = %d, want 1", got)
+	}
+	if stderr == "" {
+		t.Fatal("expected the install failure on stderr")
+	}
+	if strings.Contains(stdout, "upgraded to") {
+		t.Fatalf("reported success despite failing to install: %q", stdout)
+	}
+}
+
+// A release endpoint that answers with something other than a release must be
+// an error rather than a zero-valued ghRelease, which would read as tag "" and
+// silently compare as "no upgrade available".
+func TestFetchLatestReleaseRejectsMalformedJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/welworx/flatex-pdf-cli/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{not json"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	useTestGithubAPI(t, srv.URL)
+
+	if _, err := fetchLatestRelease(); err == nil {
+		t.Fatal("expected a decode error")
+	}
+}
+
+// A 5xx body must not be mistaken for the asset: without the status check the
+// error page itself would be checksummed and installed.
+func TestDownloadBytesRejectsNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	if _, err := downloadBytes(srv.URL + "/asset"); err == nil {
+		t.Fatal("expected a non-200 status to be an error")
 	}
 }

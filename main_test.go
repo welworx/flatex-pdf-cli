@@ -231,6 +231,60 @@ func TestWriteOutputJSONDoesNotEscapeAmpersandInSecurityName(t *testing.T) {
 	}
 }
 
+// The JSON key names are this tool's public contract — downstream importers
+// index into them by name. Decoding into a generic map rather than back into
+// schema.Transaction is the point: a struct roundtrip is symmetric and stays
+// green even if every tag is renamed, so it can't guard the wire format.
+func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.json")
+	txns := []*schema.Transaction{{
+		DocumentType: "TRADE", ISIN: "IE000YU9K6K2", WKN: "A3DP9J",
+		Date: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
+		Quantity: 1.5, Price: 47.235, PriceCurrency: "EUR", GrossValue: 50.01,
+		FinalAmount: -56, FinalCurrency: "EUR", DepositCountry: "GB",
+		Costs: &schema.Costs{Provision: 5.99, Total: 5.99},
+	}}
+
+	if err := writeOutput("json", out, "en", txns, nil, false); err != nil {
+		t.Fatalf("writeOutput failed: %v", err)
+	}
+
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(got))
+	}
+
+	for _, key := range []string{
+		"document_type", "isin", "wkn", "date", "order_date", "type",
+		"quantity", "price", "price_currency", "gross_value",
+		"final_amount", "final_currency", "deposit_country", "costs",
+	} {
+		if _, ok := got[0][key]; !ok {
+			t.Errorf("JSON is missing the %q key: %s", key, data)
+		}
+	}
+
+	costs, ok := got[0]["costs"].(map[string]any)
+	if !ok {
+		t.Fatalf("costs is not an object: %s", data)
+	}
+	// These stay present at zero on purpose: an absent costs object means the
+	// document had no charge block, a 0.00 field means flatex charged nothing.
+	for _, key := range []string{"provision", "own_expenses", "foreign_expenses", "total"} {
+		if _, ok := costs[key]; !ok {
+			t.Errorf("costs is missing the %q key: %s", key, data)
+		}
+	}
+}
+
 func TestWriteOutputJSONWritesToStdoutWhenNoOutputFile(t *testing.T) {
 	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY"}}
 
@@ -285,8 +339,11 @@ func TestProcessPDFsCapturesDepotMetadata(t *testing.T) {
 	if meta == nil {
 		t.Fatal("expected depot metadata from the fixture")
 	}
-	if meta.DepotNumber == "" && meta.DepotHolder == "" && meta.AccountNumber == "" {
-		t.Error("expected at least one metadata field to be populated")
+	if meta.DepotNumber != "11000000011" {
+		t.Errorf("DepotNumber = %q, want 11000000011", meta.DepotNumber)
+	}
+	if meta.DepotHolder != "Mustermann, Max" {
+		t.Errorf("DepotHolder = %q, want %q", meta.DepotHolder, "Mustermann, Max")
 	}
 }
 
@@ -319,6 +376,23 @@ func TestPrintVersionFallsBackToDev(t *testing.T) {
 	got := captureStdout(t, func() { printVersion() })
 	if !strings.Contains(got, "dev") {
 		t.Errorf("expected dev fallback when version is unset, got %q", got)
+	}
+}
+
+func TestDiscoverPDFsMissingPathIsAnError(t *testing.T) {
+	if _, err := discoverPDFs(filepath.Join(t.TempDir(), "no-such-dir")); err == nil {
+		t.Fatal("expected an error for a nonexistent path")
+	}
+}
+
+// -format pp writes two derived files; a failure on the first must be
+// reported rather than swallowed on the way to writing the second.
+func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "no-such-dir", "out.csv")
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+
+	if err := writeOutput("pp", out, "en", txns, nil, false); err == nil {
+		t.Fatal("expected an error writing into a nonexistent directory")
 	}
 }
 

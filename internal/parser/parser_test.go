@@ -1,65 +1,20 @@
 package parser
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
 )
 
-// TestParseRouting tests that the Parse function routes TRADE documents correctly.
-func TestParseRouting(t *testing.T) {
-	text := "Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nAusführungsdatum : 15.06.2026"
-	doc := &extractor.ExtractedDocument{
-		Filename:     "trade.pdf",
-		Text:         text,
-		DocumentType: "TRADE",
-	}
-
-	_, err := Parse(doc)
-	if err != nil {
-		t.Errorf("Parse should successfully route TRADE document, got error: %v", err)
-	}
-}
-
-// TestParseDividendRouting tests that the Parse function routes DIVIDEND documents correctly.
-func TestParseDividendRouting(t *testing.T) {
-	text := "Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : 5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR"
-	doc := &extractor.ExtractedDocument{
-		Filename:     "dividend.pdf",
-		Text:         text,
-		DocumentType: "DIVIDEND",
-	}
-
-	_, err := Parse(doc)
-	if err != nil {
-		t.Errorf("Parse should successfully route DIVIDEND document, got error: %v", err)
-	}
-}
-
-// TestParseAccumulatingRouting tests that the Parse function routes ACCUMULATING documents correctly.
-func TestParseAccumulatingRouting(t *testing.T) {
-	text := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
-	doc := &extractor.ExtractedDocument{
-		Filename:     "thesaurierung.pdf",
-		Text:         text,
-		DocumentType: "ACCUMULATING",
-	}
-
-	_, err := Parse(doc)
-	if err != nil {
-		t.Errorf("Parse should successfully route ACCUMULATING document, got error: %v", err)
-	}
-}
-
-// TestParseRoutesRemainingDocumentTypes covers the CRYPTO and ORDER branches of
-// the Parse dispatch table, which the per-parser tests reach directly and so
-// never exercised through Parse itself.
+// TestParseRoutesDocumentTypes covers the Parse dispatch table, which the
+// per-parser tests bypass by calling parseX directly. Each case asserts the
+// routed transactions come back tagged with the type they were dispatched on,
+// so a mis-wired switch arm cannot pass.
 //
 // These use synthetic text to keep the dispatch assertions independent of the
 // PDF fixtures; TestAllFixturesParse covers the real files end to end.
-func TestParseRoutesRemainingDocumentTypes(t *testing.T) {
+func TestParseRoutesDocumentTypes(t *testing.T) {
 	crypto := "Sammelabrechnung (Kauf/-verkauf Kryptowerte)\n" +
 		"Ihr Verwahrkonto bei Tangany GmbH: 44000000041\n" +
 		"Inhaber: Dr. Stefan Berger\n" +
@@ -86,10 +41,29 @@ func TestParseRoutesRemainingDocumentTypes(t *testing.T) {
 		"Gültig bis: 28.02.2026\n" +
 		"Limit: 72.500,000 EUR"
 
+	trade := "Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nAusführungsdatum : 15.06.2026"
+
+	dividend := "Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : 5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR"
+
+	accumulating := "Nr.4684511050 XTRACKERS IE00 (IE00B5L8K969/A2H514)\nSt. : 4,75 pro Stück : -0,572 USD\nExtag : 15.06.2026 Bruttothesaurierung : -2,72 USD\nValuta : 30.06.2026\nEinbeh. Steuer : 0,00 EUR\nDevisenkurs : 1,080000"
+
+	interest := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
+
+	savingsPlan := "Sammelabrechnung aus\n" +
+		"Auftrags-Nr:0005500055\n" +
+		"ISIN: IE00B3RBWM25\n" +
+		"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" +
+		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n"
+
 	cases := []struct {
 		docType string
 		text    string
 	}{
+		{"TRADE", trade},
+		{"DIVIDEND", dividend},
+		{"ACCUMULATING", accumulating},
+		{"INTEREST", interest},
+		{"SAVINGSPLAN", savingsPlan},
 		{"CRYPTO", crypto},
 		{"ORDER", order},
 	}
@@ -389,21 +363,6 @@ func TestParseDividend(t *testing.T) {
 	}
 }
 
-// TestParseInterestRouting tests that the Parse function routes INTEREST documents correctly.
-func TestParseInterestRouting(t *testing.T) {
-	text := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
-	doc := &extractor.ExtractedDocument{
-		Filename:     "interest.pdf",
-		Text:         text,
-		DocumentType: "INTEREST",
-	}
-
-	_, err := Parse(doc)
-	if err != nil {
-		t.Errorf("Parse should successfully route INTEREST document, got error: %v", err)
-	}
-}
-
 // TestParseInterest tests parsing an INTEREST statement.
 func TestParseInterest(t *testing.T) {
 	text := "ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : 3,40 EUR\nEndbetrag : 22,10 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026"
@@ -611,61 +570,6 @@ func TestParseSavingsPlan(t *testing.T) {
 	}
 }
 
-// TestParseSavingsPlanFromFixture is an integration test that loads the real savings-plan
-// fixture PDF, runs parseSavingsPlan against it, and spot-checks the output.
-func TestParseSavingsPlanFromFixture(t *testing.T) {
-	pdfPath := "../../testdata/sparplan_sample_1.pdf"
-	if _, err := os.Stat(pdfPath); err != nil {
-		t.Skipf("savings-plan fixture not found at %s; skipping", pdfPath)
-	}
-
-	doc, err := extractor.ExtractPDF(pdfPath)
-	if err != nil {
-		t.Fatalf("ExtractPDF failed: %v", err)
-	}
-
-	txs, err := parseSavingsPlan(doc)
-	if err != nil {
-		t.Fatalf("parseSavingsPlan failed: %v", err)
-	}
-	if len(txs) != 12 {
-		t.Fatalf("expected 12 transactions, got %d", len(txs))
-	}
-
-	row0 := txs[0]
-	if row0.DocumentType != "SAVINGSPLAN" {
-		t.Errorf("DocumentType = %q, want SAVINGSPLAN", row0.DocumentType)
-	}
-	if row0.Type != "BUY" {
-		t.Errorf("Type = %q, want BUY", row0.Type)
-	}
-	if row0.ISIN == "" {
-		t.Error("ISIN is empty on row 0")
-	}
-}
-
-// TestParseSavingsPlanRouting verifies Parse() routes SAVINGSPLAN documents correctly.
-func TestParseSavingsPlanRouting(t *testing.T) {
-	text := "Sammelabrechnung aus\n" +
-		"Auftrags-Nr:0005500055\n" +
-		"ISIN: IE00B3RBWM25\n" +
-		"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" +
-		"Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n"
-	doc := &extractor.ExtractedDocument{
-		Filename:     "savingsplan.pdf",
-		Text:         text,
-		DocumentType: "SAVINGSPLAN",
-	}
-
-	txs, err := Parse(doc)
-	if err != nil {
-		t.Fatalf("Parse routing failed: %v", err)
-	}
-	if len(txs) != 1 {
-		t.Errorf("expected 1 transaction via routing, got %d", len(txs))
-	}
-}
-
 // runMissingFieldCases asserts that removing each given substring from base
 // causes the parser to return an error, verifying the "field not found"
 // guard clauses that well-formed fixtures never exercise.
@@ -836,6 +740,7 @@ func TestAllFixturesParse(t *testing.T) {
 		orderDate         string
 		valueDate         string
 		depositCountry    string
+		tradeType         string
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
@@ -878,7 +783,7 @@ func TestAllFixturesParse(t *testing.T) {
 		{
 			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
 			depotNumber: "55000000051", depotHolder: "Dr. Klaus Bergmann",
-			date: "2025-01-15", valueDate: "2025-01-17",
+			date: "2025-01-15", valueDate: "2025-01-17", tradeType: "BUY",
 		},
 	}
 
@@ -917,6 +822,7 @@ func TestAllFixturesParse(t *testing.T) {
 				{"order date", txs[0].OrderDate, tc.orderDate},
 				{"value date", txs[0].ValueDate, tc.valueDate},
 				{"deposit country", txs[0].DepositCountry, tc.depositCountry},
+				{"trade type", txs[0].Type, tc.tradeType},
 			} {
 				if d.want != "" && d.got != d.want {
 					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)
@@ -966,13 +872,14 @@ func TestParseTradeUsesHandelstagNotLetterDate(t *testing.T) {
 
 // A trade with no Handelstag falls back down the chain rather than reaching
 // for the letter date, and fails outright when no transaction date exists.
+// The Handelstag-wins case itself is pinned by
+// TestParseTradeUsesHandelstagNotLetterDate.
 func TestParseTradeDateFallback(t *testing.T) {
 	cases := []struct {
 		name   string
 		header string
 		want   string // "" means parseTrade must fail
 	}{
-		{"Handelstag wins", tradeHeader, "2025-09-12"},
 		{
 			"falls back to Auftragsdatum",
 			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "2025-09-15",
