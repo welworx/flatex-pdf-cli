@@ -17,7 +17,16 @@ type Costs struct {
 	Provision       float64 `json:"provision"`        // Provision
 	OwnExpenses     float64 `json:"own_expenses"`     // Eigene Spesen
 	ForeignExpenses float64 `json:"foreign_expenses"` // Fremde Spesen
-	Total           float64 `json:"total"`            // Provision + Eigene + Fremde Spesen
+
+	// Unitemised is a charge the document does not print as a line item,
+	// recovered as the gap between the amount settled and the value of the
+	// shares. Savings-plan settlements are the known case: a row buys
+	// (Betrag - charge) / Kurs shares and never names the charge. It is kept
+	// separate from the fields above because those carry a label the document
+	// actually printed, and this one does not: it is computed, not read.
+	Unitemised float64 `json:"unitemised,omitempty"`
+
+	Total float64 `json:"total"` // Provision + Eigene + Fremde Spesen + Unitemised
 
 	// Fees itemises ForeignExpenses ("* Enthalten sind folgende Gebühren").
 	// Its components sum to ForeignExpenses, so they are already counted in

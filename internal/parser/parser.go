@@ -11,9 +11,20 @@ import (
 )
 
 // Parse routes an ExtractedDocument to the appropriate parser based on
-// DocumentType. It returns a slice because some document types (e.g. order
-// confirmations) contain multiple transactions.
+// DocumentType, then cross-checks the result. It returns a slice because some
+// document types (e.g. order confirmations) contain multiple transactions.
 func Parse(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
+	txns, err := parseByType(doc)
+	if err != nil {
+		return nil, err
+	}
+	if err := validate(txns); err != nil {
+		return nil, err
+	}
+	return txns, nil
+}
+
+func parseByType(doc *extractor.ExtractedDocument) ([]*schema.Transaction, error) {
 	switch doc.DocumentType {
 	case "TRADE":
 		return one(parseTrade(doc))
@@ -598,6 +609,29 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		if strings.ToLower(m[1]) == "verkauf" {
 			tradeType = "SELL"
 		}
+
+		quantity := mustFloat(m[4])
+		price := mustFloat(m[5])
+		// The Betrag column is the cash that moved, not the value of the
+		// shares: a row settles (Betrag - charge) / Kurs shares and the
+		// Sammelabrechnung never prints the charge. Recovering it here keeps
+		// GrossValue meaning the same thing it means on a trade confirmation
+		// (Kurswert, shares only) instead of silently folding a fee into the
+		// purchase price.
+		settled := mustFloat(m[6])
+		shareValue := roundCents(quantity * price)
+		charge, err := unitemisedCharge(tradeType, settled, shareValue)
+		if err != nil {
+			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
+		}
+
+		// Buys move cash out, sales move it in, matching FinalAmount's sign
+		// convention on trade confirmations.
+		finalAmount := -settled
+		if tradeType == "SELL" {
+			finalAmount = settled
+		}
+
 		txns = append(txns, &schema.Transaction{
 			DocumentType:  "SAVINGSPLAN",
 			ISIN:          isin,
@@ -607,10 +641,13 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			Date:          convertGermanDate(m[2]), // Buchtag — the trade date of the row
 			ValueDate:     convertGermanDate(m[3]), // Valuta — settlement
 			Type:          tradeType,
-			Quantity:      mustFloat(m[4]),
-			Price:         mustFloat(m[5]),
+			Quantity:      quantity,
+			Price:         price,
 			PriceCurrency: "EUR",
-			GrossValue:    mustFloat(m[6]),
+			GrossValue:    shareValue,
+			Costs:         &schema.Costs{Unitemised: charge, Total: charge},
+			FinalAmount:   finalAmount,
+			FinalCurrency: "EUR",
 			// Savings-plan rows are settled in EUR and carry no Devisenkurs
 			// line; without an explicit 1.0 the PP export writes an exchange
 			// rate of 0.
