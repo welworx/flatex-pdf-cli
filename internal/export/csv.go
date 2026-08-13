@@ -13,7 +13,7 @@ import (
 var csvHeader = []string{
 	"source", "order_number", "transaction_number", "document_type", "isin", "wkn",
 	"security_name", "date", "order_date", "type", "quantity", "price", "price_currency",
-	"gross_value", "provision", "own_expenses", "foreign_expenses", "total_costs",
+	"gross_value", "provision", "own_expenses", "foreign_expenses", "unitemised", "total_costs",
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
 	"fee_ls_allocation", "fee_financial_transaction_tax", "fee_other",
 	"withholding_tax", "gain_loss", "exchange_rate",
@@ -58,11 +58,11 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	return cw.Error()
 }
 
-// costColumns renders the 11 cost columns, all blank when the document had no
+// costColumns renders the 12 cost columns, all blank when the document had no
 // charge block and all zero-filled when it had one but itemised no Gebühren.
 func costColumns(c *schema.Costs) []string {
 	if c == nil {
-		return make([]string, 11)
+		return make([]string, 12)
 	}
 	f := c.Fees
 	if f == nil {
@@ -70,7 +70,7 @@ func costColumns(c *schema.Costs) []string {
 	}
 	return []string{
 		formatFloat(c.Provision), formatFloat(c.OwnExpenses),
-		formatFloat(c.ForeignExpenses), formatFloat(c.Total),
+		formatFloat(c.ForeignExpenses), formatFloat(c.Unitemised), formatFloat(c.Total),
 		formatFloat(f.Courtage), formatFloat(f.TradingFee), formatFloat(f.Settlement),
 		formatFloat(f.ClosingNotes), formatFloat(f.LSAllocation),
 		formatFloat(f.FinancialTransactionTax), formatFloat(f.Other),

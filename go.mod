@@ -1,6 +1,6 @@
 module github.com/welworx/flatex-pdf-cli
 
-go 1.26.4
+go 1.26.6
 
 require github.com/coregx/gxpdf v0.9.4
 

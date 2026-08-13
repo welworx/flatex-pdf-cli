@@ -554,8 +554,24 @@ func TestParseSavingsPlan(t *testing.T) {
 	if a.PriceCurrency != "EUR" {
 		t.Errorf("PriceCurrency = %q, want EUR", a.PriceCurrency)
 	}
-	if a.GrossValue != 200.00 {
-		t.Errorf("GrossValue = %f, want 200.00", a.GrossValue)
+	// GrossValue is the value of the shares (Stücke x Kurs), not the Betrag
+	// column: the 200.00 settled buys 198.50 worth of shares, and the 1.50
+	// difference is a charge the Sammelabrechnung never prints as a line item.
+	if a.GrossValue != 198.50 {
+		t.Errorf("GrossValue = %f, want 198.50", a.GrossValue)
+	}
+	if a.Costs == nil {
+		t.Fatal("Costs = nil, want the derived charge")
+	}
+	if a.Costs.Unitemised != 1.50 {
+		t.Errorf("Costs.Unitemised = %f, want 1.50", a.Costs.Unitemised)
+	}
+	if a.Costs.Total != 1.50 {
+		t.Errorf("Costs.Total = %f, want 1.50", a.Costs.Total)
+	}
+	// Buys move cash out, matching FinalAmount on a trade confirmation.
+	if a.FinalAmount != -200.00 {
+		t.Errorf("FinalAmount = %f, want -200.00", a.FinalAmount)
 	}
 
 	b := txs[1]
@@ -565,8 +581,59 @@ func TestParseSavingsPlan(t *testing.T) {
 	if b.Date != "2025-02-17" {
 		t.Errorf("Date = %q, want 2025-02-17", b.Date)
 	}
+	// 1,436948 x 138,14 is 198.50, exactly what this row settled, so there is
+	// no gap and no charge to recover.
 	if b.GrossValue != 198.50 {
 		t.Errorf("GrossValue = %f, want 198.50", b.GrossValue)
+	}
+	if b.Costs.Unitemised != 0 {
+		t.Errorf("Costs.Unitemised = %f, want 0", b.Costs.Unitemised)
+	}
+	if b.FinalAmount != 198.50 {
+		t.Errorf("FinalAmount = %f, want 198.50", b.FinalAmount)
+	}
+}
+
+// TestSavingsPlanChargeBound asserts that a settlement gap too large to be a
+// fee fails the parse instead of being booked as a suspiciously large charge.
+// This is the check that a layout change actually trips: once the charge is
+// recovered the row reconciles by construction, so the bound is the only part
+// that can fail.
+func TestSavingsPlanChargeBound(t *testing.T) {
+	tests := []struct {
+		name    string
+		row     string
+		wantErr bool
+	}{
+		{
+			name: "ordinary charge",
+			row:  "Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 200,00 EUR\n",
+		},
+		{
+			name:    "shares worth more than was settled",
+			row:     "Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 150,00 EUR\n",
+			wantErr: true,
+		},
+		{
+			name:    "gap far too large to be a fee",
+			row:     "Kauf 15.01.2025 17.01.2025 1,478695 134,2400 EUR 900,00 EUR\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			text := "Sammelabrechnung aus\nAuftrags-Nr:0005500055\nISIN: IE00B3RBWM25\n" +
+				"K/V Buchtag Valuta Stücke/Nom.Ausf.-Kurs Betrag\n" + tc.row
+			doc := &extractor.ExtractedDocument{Filename: "x.pdf", Text: text, DocumentType: "SAVINGSPLAN"}
+			_, err := parseSavingsPlan(doc)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected the parse to fail, got no error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected the parse to succeed, got %v", err)
+			}
+		})
 	}
 }
 

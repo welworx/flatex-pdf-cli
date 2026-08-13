@@ -99,12 +99,19 @@ flatex-pdf-cli path/to/documents/
 - `-include-source` — Add source filename to each transaction
 - `-include-metadata` — Wrap output with depot metadata
 - `-quiet` — Hide skipped/problematic files; emit only valid JSON
+- `-verbose` — Print progress to stderr: files parsed, and any charge derived rather than read from the document
 - `-version` — Show version and exit
 
 When given a directory, the tool processes every `.pdf` it finds. A file it
 cannot parse is reported on stderr and **skipped** — the rest still produce
 output, so one bad document never aborts the batch. Use `-quiet` to suppress
 the skip messages and get pure JSON on stdout.
+
+A run that skipped anything **exits non-zero** and prints how many of the files
+parsed, even under `-quiet`. Output is still written: the documents that parsed
+are worth having. This matters on a schedule, where the exit status is usually
+the only thing anything looks at, and a partial batch reported as success is a
+data gap nobody notices.
 
 ### Examples
 
@@ -245,6 +252,16 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
+- **Savings-plan charges are derived, not read.** A `Sammelabrechnung aus`
+  prints only the amount settled per row, never a fee line: a 200,00 EUR
+  execution at 134,2400 EUR buys 1,478695 shares, which is 198,50 EUR of stock,
+  and the missing 1,50 EUR is a charge the document does not itemise. The
+  parser recovers it as that gap and reports it as `costs.unitemised`, kept
+  separate from `provision` / `own_expenses` / `foreign_expenses` because those
+  carry a label the statement actually printed and this one does not. Run with
+  `-verbose` to see the arithmetic per row. A gap that is negative, or larger
+  than 5% of the amount settled, is treated as a layout change and fails the
+  parse rather than being booked as an implausibly large fee.
 - **German-language PDFs only.** Document-type detection and field extraction
   are keyed to German labels (`Wertpapierabrechnung`, `Valuta`,
   `Devisenkurs`, …); non-German statements are detected and rejected with an

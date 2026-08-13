@@ -36,6 +36,7 @@ func main() {
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
+	verbose := flag.Bool("verbose", false, "print progress to stderr: files parsed and any charge derived rather than read from the document")
 	flag.Parse()
 
 	args := flag.Args()
@@ -70,8 +71,36 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *verbose {
+		fmt.Fprintf(os.Stderr, "parsed %d transaction(s) from %d of %d file(s)\n",
+			len(transactions), len(pdfFiles)-len(errs), len(pdfFiles))
+		// Charges recovered from a settlement gap are the one set of figures
+		// here that the document never printed, so show the arithmetic that
+		// produced them rather than only the result.
+		for _, t := range transactions {
+			if t.Costs == nil || t.Costs.Unitemised == 0 {
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "%s %s %s: charge %.2f derived, %.2f settled less %.6f x %.2f in shares (not itemised by the document)\n",
+				t.DocumentType, t.Date, t.ISIN, t.Costs.Unitemised,
+				t.GrossValue+t.Costs.Unitemised, t.Quantity, t.Price)
+		}
+	}
+
 	if err := writeOutput(*format, *outputFile, *lang, transactions, metadata, *includeMetadata); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
+		os.Exit(1)
+	}
+
+	// A partly failed batch still writes its output, because the documents that
+	// did parse are worth having, but it must not report success. This runs
+	// unattended, where the exit status is the only thing a scheduler looks at,
+	// so exiting 0 here would turn a skipped statement into a silent data gap.
+	// -quiet hides the per-file lines to keep stdout clean; it does not hide
+	// the failure itself.
+	if len(errs) > 0 {
+		fmt.Fprintf(os.Stderr, "parsed %d of %d file(s); %d skipped\n",
+			len(pdfFiles)-len(errs), len(pdfFiles), len(errs))
 		os.Exit(1)
 	}
 
