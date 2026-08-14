@@ -58,6 +58,7 @@ All extracted transactions are returned as JSON objects with the following struc
 - `document_type` — Type of document (TRADE, DIVIDEND, INTEREST, ACCUMULATING, ORDER, CRYPTO, SAVINGSPLAN)
 - `isin` — ISIN of the security
 - `wkn` — German securities identification number (if available)
+- `security_name` — Bezeichnung of the security, if the document prints one
 - `date` — Transaction date in YYYY-MM-DD format. See [Which date is `date`?](#which-date-is-date).
 
 ## Which date is `date`?

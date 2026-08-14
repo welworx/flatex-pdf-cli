@@ -122,6 +122,12 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		wkn = extractWKN(text)
 	}
 
+	// Security name sits on the order line, between the side and "(ISIN/WKN)":
+	// "Nr.700000011/1  Kauf  L&G GOLD MINING ETF (IE00B3CNHG25/A0Q8HZ)".
+	// Older layouts print "Nr. 800000022/1" with a space after the dot.
+	securityName := extractString(text,
+		`Nr\.\s*[\d/]+\s+(?:Kauf|Verkauf)\s+(.+?)\s*\([A-Z]{2}[A-Z0-9]{9}[0-9]/`)
+
 	// Extract identifiers (all optional)
 	orderNumber := extractString(text, `Auftragsnummer\s*:?\s*(\S+)`)
 	transactionNumber := extractString(text, `Transaktion-Nr\.\s*:?\s*(\d+)`)
@@ -140,6 +146,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		DocumentType:      "TRADE",
 		ISIN:              isin,
 		WKN:               wkn,
+		SecurityName:      securityName,
 		Date:              date,
 		OrderDate:         dateField(text, `Auftragsdatum`),
 		ValueDate:         dateField(text, `Valuta`),

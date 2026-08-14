@@ -808,6 +808,7 @@ func TestAllFixturesParse(t *testing.T) {
 		valueDate         string
 		depositCountry    string
 		tradeType         string
+		securityName      string
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
@@ -815,7 +816,7 @@ func TestAllFixturesParse(t *testing.T) {
 			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
 			// Letter date is 16.09.2025; Handelstag is 15.09.2025.
 			date: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
-			depositCountry: "GB",
+			depositCountry: "GB", securityName: "L&G GOLD MINING ETF",
 		},
 		{
 			file: "trade_sample_2.pdf", docType: "TRADE", wantTransactions: 1,
@@ -825,6 +826,8 @@ func TestAllFixturesParse(t *testing.T) {
 			date: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
 			// Lagerland runs into the next column in gxpdf's output here.
 			depositCountry: "GB",
+			// Older layout prints "Nr. 800000022/1" with a space after the dot.
+			securityName: "GLOBAL X COPPER MINERS ET",
 		},
 		{
 			file: "trade_sample_3.pdf", docType: "TRADE", wantTransactions: 1,
@@ -838,6 +841,7 @@ func TestAllFixturesParse(t *testing.T) {
 			// repairs it. Asserting GB here is what pins that fix.
 			depositCountry: "GB",
 			tradeType:      "BUY",
+			securityName:   "VANGUARD FTSE ALL-WLD UCI",
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
@@ -903,6 +907,7 @@ func TestAllFixturesParse(t *testing.T) {
 				{"value date", txs[0].ValueDate, tc.valueDate},
 				{"deposit country", txs[0].DepositCountry, tc.depositCountry},
 				{"trade type", txs[0].Type, tc.tradeType},
+				{"security name", txs[0].SecurityName, tc.securityName},
 			} {
 				if d.want != "" && d.got != d.want {
 					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)
