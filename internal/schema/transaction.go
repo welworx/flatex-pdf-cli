@@ -64,16 +64,29 @@ type Transaction struct {
 	WKN               string `json:"wkn,omitempty"`
 	SecurityName      string `json:"security_name,omitempty"` // Bezeichnung (e.g. crypto without ISIN)
 
-	// Date is the economically relevant date of the transaction: the trade
-	// date (Handelstag/Schlusstag/Buchtag) for anything that moves a
-	// position, the value date (Valuta) for pure cash events (dividend,
-	// interest, accumulation). OrderDate and ValueDate carry the other two
-	// so a consumer can pick a different convention without re-parsing. All
-	// three are declared together so they are emitted together: ValueDate
-	// used to sit among the dividend fields and surfaced at the far end of a
-	// trade object, a long way from the two dates it belongs with.
-	Date      string `json:"date"`
+	// One field per date the document prints, each present only when it does.
+	//
+	// There used to be a single "date" alongside these, holding whichever of
+	// them mattered for the document type — the trade date on a trade, the
+	// value date on a dividend. It read as an extracted field and was not one:
+	// its meaning changed underneath a consumer depending on what it was
+	// looking at. Picking a primary date is a decision for whoever needs one,
+	// so the Portfolio Performance export makes it (see ppDate) and the
+	// extracted data no longer pretends to.
 	OrderDate string `json:"order_date,omitempty"` // Auftragsdatum — when the order was placed
+
+	// TradeDate is when the trade executed: Handelstag on a confirmation,
+	// Schlusstag on crypto, Ausführungsdatum on older layouts. "Trade date" is
+	// the standard term for this — the counterpart to the value date, and what
+	// T+2 counts from — and it is what all three German labels denote.
+	TradeDate string `json:"trade_date,omitempty"`
+
+	// BookingDate is a savings plan's Buchtag. It is deliberately not folded
+	// into TradeDate: Buchtag is when the row was booked, and a
+	// Sammelabrechnung states no Handelstag at all, so those rows carry no
+	// confirmed execution day to report.
+	BookingDate string `json:"booking_date,omitempty"`
+
 	ValueDate string `json:"value_date,omitempty"` // Valuta — when the cash settled
 
 	// ExecutionTime is the Ausführungszeit, as "HH:MM". The document prints it

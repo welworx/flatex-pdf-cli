@@ -67,10 +67,10 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 		}
 		ppType, err := ppTradeType(lang, t.Type)
 		if err != nil {
-			return fmt.Errorf("%s %s: %w", t.DocumentType, t.Date, err)
+			return fmt.Errorf("%s %s: %w", t.DocumentType, ppDate(t), err)
 		}
 		row := []string{
-			t.Date,
+			ppDate(t),
 			ppType,
 			formatAmount(portfolioValue(t), lang),
 			formatAmount(schema.Amount(t.Quantity), lang),
@@ -109,6 +109,25 @@ func portfolioValue(t *schema.Transaction) float64 {
 		return grossValue - t.TotalCosts()
 	}
 	return grossValue + t.TotalCosts()
+}
+
+// ppDate fills PP's Datum column. PP's import takes exactly one date per
+// transaction, so something has to choose which of the ones a statement prints
+// that is — and this is where the choice belongs, not in the extracted data.
+//
+// The trade date is what PP wants for a portfolio transaction: it fixes the
+// price and starts the holding period. A savings-plan row states no Handelstag,
+// only a Buchtag, and a pure cash event (dividend, interest, accumulation)
+// states neither, so each falls back to the next date it does carry.
+func ppDate(t *schema.Transaction) string {
+	switch {
+	case t.TradeDate != "":
+		return t.TradeDate
+	case t.BookingDate != "":
+		return t.BookingDate
+	default:
+		return t.ValueDate
+	}
 }
 
 // ppFees fills PP's Gebühren column. Most documents itemise their charges and
@@ -207,7 +226,7 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 			continue
 		}
 		row := []string{
-			t.Date, ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
+			ppDate(t), ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
 			formatAmount(schema.Amount(t.WithholdingTax), lang), "0", note(t),
 		}
 		if err := cw.Write(row); err != nil {

@@ -71,7 +71,7 @@ func TestDiscoverPDFsFindsAndSortsRecursively(t *testing.T) {
 func TestWriteOutputCSVFormat(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("csv", out, "en", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)
@@ -96,8 +96,8 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)},
-		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: amt(10)},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)},
+		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", NetAmount: amt(10)},
 	}
 
 	if err := writeOutput("pp", out, "en", txns, nil, false); err != nil {
@@ -115,7 +115,7 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 func TestWriteOutputPPFormatRejectsUnknownLangWithoutWritingFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "fr", txns, nil, false); err == nil {
 		t.Fatal("expected error for unknown lang")
@@ -165,7 +165,7 @@ func captureStdout(t *testing.T, fn func()) string {
 func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789"}
 
 	// Metadata is passed but includeMetadata is false: it must not leak out.
@@ -192,7 +192,7 @@ func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 func TestWriteOutputJSONWithMetadataWrapsTransactions(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789", DepotHolder: "Max Mustermann"}
 
 	if err := writeOutput("json", out, "en", txns, meta, true); err != nil {
@@ -220,7 +220,7 @@ func TestWriteOutputJSONWithMetadataWrapsTransactions(t *testing.T) {
 func TestWriteOutputJSONDoesNotEscapeAmpersandInSecurityName(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", SecurityName: "Procter & Gamble", Date: "2024-06-15", Type: "BUY"}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", SecurityName: "Procter & Gamble", TradeDate: "2024-06-15", Type: "BUY"}}
 
 	if err := writeOutput("json", out, "en", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)
@@ -244,7 +244,7 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 	out := filepath.Join(dir, "out.json")
 	txns := []*schema.Transaction{{
 		DocumentType: "TRADE", ISIN: "IE000YU9K6K2", WKN: "A3DP9J",
-		Date: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
+		TradeDate: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
 		Quantity: amt(1.5), Price: amt(47.235), GrossCurrency: "EUR", GrossAmount: amt(50.01),
 		NetAmount: amt(-56), NetCurrency: "EUR", DepositCountry: "GB",
 		Costs: &schema.Costs{Provision: schema.Num(5.99, 2), Total: schema.Num(5.99, 2)},
@@ -267,7 +267,7 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 	}
 
 	for _, key := range []string{
-		"document_type", "isin", "wkn", "date", "order_date", "type",
+		"document_type", "isin", "wkn", "trade_date", "order_date", "type",
 		"quantity", "price", "gross_amount", "gross_currency",
 		"net_amount", "net_currency", "deposit_country", "costs",
 	} {
@@ -276,10 +276,15 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 		}
 	}
 
-	// The names a trade used to settle under. A dividend already spelled the
-	// same three quantities gross_amount/net_amount/gross_currency, so these
-	// four were the duplicate half of each pair and must not come back.
-	for _, key := range []string{"price_currency", "gross_value", "final_amount", "final_currency"} {
+	// Retired names that must not come back. The first four were a trade's
+	// half of a duplicated pair — a dividend already spelled the same
+	// quantities gross_amount/net_amount/gross_currency. "date" was different:
+	// it held whichever date mattered for the document type, so it read as an
+	// extracted field while meaning the trade date on a trade and the value
+	// date on a dividend.
+	for _, key := range []string{
+		"price_currency", "gross_value", "final_amount", "final_currency", "date",
+	} {
 		if _, ok := got[0][key]; ok {
 			t.Errorf("JSON still carries the retired %q key: %s", key, data)
 		}
@@ -299,7 +304,7 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 }
 
 func TestWriteOutputJSONWritesToStdoutWhenNoOutputFile(t *testing.T) {
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY"}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY"}}
 
 	var err error
 	got := captureStdout(t, func() {
@@ -446,7 +451,7 @@ func TestDiscoverPDFsMissingPathIsAnError(t *testing.T) {
 // reported rather than swallowed on the way to writing the second.
 func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "no-such-dir", "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "en", txns, nil, false); err == nil {
 		t.Fatal("expected an error writing into a nonexistent directory")
@@ -456,7 +461,7 @@ func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 func TestWriteOutputPPFormatGermanLang(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "de", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)

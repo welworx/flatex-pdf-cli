@@ -104,7 +104,7 @@ func TestDecimalRoundTripsThroughJSON(t *testing.T) {
 func TestDecimalEmbedsAsValidJSONNumber(t *testing.T) {
 	q, p := Num(14, 0), Num(110, 6)
 	data, err := json.Marshal(&Transaction{
-		DocumentType: "TRADE", ISIN: "X", Date: "2024-12-18",
+		DocumentType: "TRADE", ISIN: "X", TradeDate: "2024-12-18",
 		Quantity: &q, Price: &p,
 	})
 	if err != nil {

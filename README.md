@@ -50,7 +50,7 @@ flatex-pdf-cli ~/Downloads/statement.pdf
   {
     "document_type": "DIVIDEND",
     "isin": "IE00B3RBWM25",
-    "date": "2025-10-01",
+    "value_date": "2025-10-01",
     "quantity": 74.45,
     "distribution_per_share": 0.4227450,
     "gross_amount": 31.47,
@@ -199,7 +199,7 @@ with depot metadata:
       "document_type": "TRADE",
       "isin": "DE0005140008",
       "wkn": "514000",
-      "date": "2024-06-15",
+      "trade_date": "2024-06-15",
       "order_date": "2024-06-13",
       "value_date": "2024-06-17",
       "execution_time": "13:56",
@@ -248,13 +248,18 @@ Five things worth knowing before you use the numbers:
   than filled in: no Devisenkurs means no `exchange_rate`, not a default of
   `1`; a savings-plan row that prints only Stücke, Kurs and Betrag yields
   exactly `quantity`, `price` and `net_amount`.
-- **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
-  crypto and savings plans) — not the date printed at the top of the letter.
-  `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
-  alongside it, and on a real statement all three are usually different days.
-  `execution_time` carries the `Ausführungszeit` as a bare `"HH:MM"` — the
-  document states no zone, so it is not folded into a timestamp. Dividends and
-  interest use `Valuta` as their `date`, since that is when the money moves.
+- **One field per date the document prints**, and no catch-all `date`.
+  `trade_date` is the `Handelstag` (`Schlusstag` on crypto,
+  `Ausführungsdatum` on older layouts) — never the date at the top of the
+  letter. `order_date` is the `Auftragsdatum`, `value_date` the `Valuta`, and
+  on a real statement all three are usually different days. A savings-plan row
+  states a `Buchtag` and no `Handelstag`, so it carries `booking_date` and no
+  trade date; dividends and interest carry only `value_date`; a pending order
+  only `order_date`. `execution_time` carries the `Ausführungszeit` as a bare
+  `"HH:MM"` — the document states no zone, so it is not folded into a
+  timestamp. If you need a single date to sort or import by, that choice is
+  yours: `trade_date ?? booking_date ?? value_date` is what the Portfolio
+  Performance export uses.
 - **The settlement fields are the same on every document type.** A trade's
   `Kurswert` and a dividend's `Bruttoausschüttung` both land in `gross_amount`;
   `Endbetrag` always lands in `net_amount`, whichever document it came from.

@@ -13,7 +13,7 @@ func TestWriteCSVHeaderAndRow(t *testing.T) {
 		{
 			DocumentType: "TRADE",
 			ISIN:         "IE000YU9K6K2",
-			Date:         "2024-06-15",
+			TradeDate:    "2024-06-15",
 			Type:         "BUY",
 			Quantity:     amt(1.5),
 			GrossAmount:  amt(50.01),
@@ -51,13 +51,13 @@ func TestWriteCSVDistinguishesStatedZeroFromAbsent(t *testing.T) {
 		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	}
 
-	absent := render(t, &schema.Transaction{DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15"})
+	absent := render(t, &schema.Transaction{DocumentType: "TRADE", ISIN: "X", TradeDate: "2024-06-15"})
 	if got := csvField(t, absent, "quantity"); got != "" {
 		t.Errorf("a quantity the document never stated must render empty, got %q", got)
 	}
 
 	stated := render(t, &schema.Transaction{
-		DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15", Quantity: amt(0),
+		DocumentType: "TRADE", ISIN: "X", TradeDate: "2024-06-15", Quantity: amt(0),
 	})
 	if got := csvField(t, stated, "quantity"); got != "0.00" {
 		t.Errorf("a stated 0,00 quantity must render as \"0.00\", got %q", got)
@@ -70,8 +70,8 @@ func TestWriteCSVDistinguishesStatedZeroFromAbsent(t *testing.T) {
 // from a document that never had a Provision line.
 func TestWriteCSVCostColumnsBlankWithoutCostBlock(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "DIVIDEND", ISIN: "X", Date: "2024-06-15"},
-		{DocumentType: "TRADE", ISIN: "Y", Date: "2024-06-15",
+		{DocumentType: "DIVIDEND", ISIN: "X", TradeDate: "2024-06-15"},
+		{DocumentType: "TRADE", ISIN: "Y", TradeDate: "2024-06-15",
 			Costs: &schema.Costs{Provision: schema.Num(0, 2), ForeignExpenses: schema.Num(3, 2), Total: schema.Num(3, 2)}},
 	}
 

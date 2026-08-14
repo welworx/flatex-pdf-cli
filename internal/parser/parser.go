@@ -65,18 +65,23 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 
 	// flatex prints four dates in a trade header: the letter date ("Graz,
 	// 16.09.2025"), Auftragsdatum (order placed), Handelstag (executed) and
-	// Valuta (settled). Handelstag is the one that dates the position change
-	// and is what Portfolio Performance imports as the transaction date.
+	// Valuta (settled). Handelstag is the one that dates the position change.
 	// Scanning for the first date-shaped string in the document instead
 	// picked up the letter date, which is usually a day or more late.
-	date := firstNonEmpty(
+	//
+	// The three labels below are the same field under different names across
+	// layouts. Auftragsdatum used to close this chain as a last resort, which
+	// meant a document without a Handelstag reported its order date as the
+	// trade date — a wrong answer dressed as a right one, and one the
+	// order_date field already carries. A trade confirmation states when it
+	// executed; if none of these three is present, say so.
+	tradeDate := firstNonEmpty(
 		dateField(text, `Handelstag`),
 		dateField(text, `Schlusstag`),
 		dateField(text, `Ausführungsdatum`),
-		dateField(text, `Auftragsdatum`),
 	)
-	if date == "" {
-		return nil, fmt.Errorf("trade date (Handelstag) not found in document")
+	if tradeDate == "" {
+		return nil, fmt.Errorf("trade date (Handelstag/Schlusstag/Ausführungsdatum) not found in document")
 	}
 
 	// Determine trade type: "Kauf" → "BUY", "Verkauf" → "SELL"
@@ -146,7 +151,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		ISIN:              isin,
 		WKN:               wkn,
 		SecurityName:      securityName,
-		Date:              date,
+		TradeDate:         tradeDate,
 		OrderDate:         dateField(text, `Auftragsdatum`),
 		ValueDate:         dateField(text, `Valuta`),
 		ExecutionTime:     timeField(text, `Ausführungszeit`),
@@ -191,8 +196,8 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	}
 
 	// Schlusstag is the trade date (may be followed by a time).
-	date := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
-	if date == "" {
+	tradeDate := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
+	if tradeDate == "" {
 		return nil, fmt.Errorf("trade date (Schlusstag) not found in document")
 	}
 
@@ -225,7 +230,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		TransactionNumber: extractString(text, `Transaktion-Nr\.:\s*(\d+)`),
 		DocumentType:      "CRYPTO",
 		SecurityName:      name,
-		Date:              date,
+		TradeDate:         tradeDate,
 		// Crypto has no Ausführungszeit line; the time rides on Schlusstag
 		// ("Schlusstag: 29.01.2026, 16:00 Uhr").
 		ExecutionTime:  extractString(text, `Schlusstag:\s*\d{2}\.\d{2}\.\d{4},\s*(\d{2}:\d{2})`),
@@ -281,10 +286,13 @@ func parseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transac
 			SecurityName: strings.TrimSpace(m[3]),
 			WKN:          m[4],
 			Type:         tradeType,
-			Date:         convertGermanDate(m[6]),
-			Quantity:     ptr(mustFloat(m[7])),
-			ValidUntil:   convertGermanDate(m[8]),
-			Limit:        ptr(mustFloat(m[9])),
+			// "Kauf vom 28.01.2026" — the Auftr.Datum column. A pending order
+			// has not executed, so it has an order date and no trade date;
+			// this used to be reported as the transaction's date.
+			OrderDate:  convertGermanDate(m[6]),
+			Quantity:   ptr(mustFloat(m[7])),
+			ValidUntil: convertGermanDate(m[8]),
+			Limit:      ptr(mustFloat(m[9])),
 		})
 	}
 	return txs, nil
@@ -381,7 +389,6 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		DocumentType:           "DIVIDEND",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
 		Quantity:               ptr(quantity),
 		DistributionPerShare:   ptr(distributionPerShare),
 		DistributionCurrency:   distributionCurrency,
@@ -476,7 +483,7 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		DocumentType:           "INTEREST",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
+		ValueDate:              valueDate,
 		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
@@ -572,7 +579,6 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		DocumentType:           "ACCUMULATING",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
 		Quantity:               ptr(quantity),
 		ReinvestmentPerShare:   ptr(reinvestmentPerShare),
 		ReinvestmentCurrency:   reinvestmentCurrency,
@@ -645,7 +651,7 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			WKN:          wkn,
 			OrderNumber:  orderNumber,
 			SecurityName: securityName,
-			Date:         convertGermanDate(m[2]), // Buchtag — the trade date of the row
+			BookingDate:  convertGermanDate(m[2]), // Buchtag — when the row was booked
 			ValueDate:    convertGermanDate(m[3]), // Valuta — settlement
 			Type:         tradeType,
 			Quantity:     ptr(quantity),

@@ -246,7 +246,7 @@ func TestParseCrypto(t *testing.T) {
 		{"Provision", tx.Costs.Provision.Float(), 5.07},
 		{"TotalCosts", tx.TotalCosts(), 5.07},
 		{"NetAmount", schema.Amount(tx.NetAmount), -1019.54},
-		{"Date", tx.Date, "2026-01-29"},
+		{"Date", tx.TradeDate, "2026-01-29"},
 		{"ValueDate", tx.ValueDate, "2026-01-30"},
 		{"CustodyType", tx.CustodyType, "Kryptoverwahrung"},
 		{"Depositary", tx.Depositary, "Tangany GmbH"},
@@ -289,7 +289,7 @@ func TestParseOrderConfirmation(t *testing.T) {
 	a := txs[0]
 	if a.OrderNumber != "330000111" || a.ISIN != "XFC000A2YY6Q" || a.SecurityName != "BITCOIN Tradias" ||
 		a.WKN != "992668" || a.Type != "BUY" ||
-		a.Date != "2026-01-28" || schema.Amount(a.Quantity) != 0.014 || a.ValidUntil != "2026-02-28" ||
+		a.OrderDate != "2026-01-28" || schema.Amount(a.Quantity) != 0.014 || a.ValidUntil != "2026-02-28" ||
 		schema.Amount(a.Limit) != 72500.0 || a.DocumentType != "ORDER" {
 		t.Errorf("order[0] mismatch: %+v", a)
 	}
@@ -456,8 +456,8 @@ func TestParseInterest(t *testing.T) {
 	if tx.PeriodTo != "2026-03-31" {
 		t.Errorf("expected PeriodTo=2026-03-31, got %s", tx.PeriodTo)
 	}
-	if tx.Date != "2026-04-15" {
-		t.Errorf("expected Date=2026-04-15, got %s", tx.Date)
+	if tx.ValueDate != "2026-04-15" {
+		t.Errorf("expected ValueDate=2026-04-15, got %s", tx.ValueDate)
 	}
 }
 
@@ -596,8 +596,8 @@ func TestParseSavingsPlan(t *testing.T) {
 	if a.Type != "BUY" {
 		t.Errorf("Type = %q, want BUY", a.Type)
 	}
-	if a.Date != "2025-01-15" {
-		t.Errorf("Date = %q, want 2025-01-15", a.Date)
+	if a.BookingDate != "2025-01-15" {
+		t.Errorf("Date = %q, want 2025-01-15", a.BookingDate)
 	}
 	if schema.Amount(a.Quantity) != 1.478695 {
 		t.Errorf("Quantity = %f, want 1.478695", schema.Amount(a.Quantity))
@@ -638,8 +638,8 @@ func TestParseSavingsPlan(t *testing.T) {
 	if b.Type != "SELL" {
 		t.Errorf("Type = %q, want SELL", b.Type)
 	}
-	if b.Date != "2025-02-17" {
-		t.Errorf("Date = %q, want 2025-02-17", b.Date)
+	if b.BookingDate != "2025-02-17" {
+		t.Errorf("Date = %q, want 2025-02-17", b.BookingDate)
 	}
 	if got := b.NetAmount.String(); got != "198.50" {
 		t.Errorf("NetAmount = %s, want 198.50", got)
@@ -862,7 +862,8 @@ func TestAllFixturesParse(t *testing.T) {
 		transactionNumber string
 		depotNumber       string
 		depotHolder       string
-		date              string // txs[0].Date — the trade/value date, not the letter date
+		tradeDate         string // Handelstag/Schlusstag, not the letter date
+		bookingDate       string // Buchtag, savings plans only
 		orderDate         string
 		valueDate         string
 		executionTime     string
@@ -877,7 +878,7 @@ func TestAllFixturesParse(t *testing.T) {
 			orderNumber: "700000011/1", transactionNumber: "7000000011",
 			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
 			// Letter date is 16.09.2025; Handelstag is 15.09.2025.
-			date: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
+			tradeDate: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
 			depositCountry: "GB", securityName: "L&G GOLD MINING ETF",
 		},
 		{
@@ -885,7 +886,7 @@ func TestAllFixturesParse(t *testing.T) {
 			orderNumber: "800000022/1", transactionNumber: "7000000022",
 			depotNumber: "22000000021", depotHolder: "Beispiel, Erika",
 			// Auftragsdatum 28.01. and Valuta 03.02. straddle Handelstag 30.01.
-			date: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
+			tradeDate: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
 			// Lagerland runs into the next column in gxpdf's output here.
 			depositCountry: "GB",
 			// Older layout prints "Nr. 800000022/1" with a space after the dot.
@@ -896,7 +897,7 @@ func TestAllFixturesParse(t *testing.T) {
 			orderNumber: "880000088/1", transactionNumber: "8800000088",
 			depotNumber: "88000000081", depotHolder: "Steiner, Felix",
 			// Letter date, Auftragsdatum and Handelstag are all 15.01.2025.
-			date: "2025-01-15", orderDate: "2025-01-15", valueDate: "2025-01-17",
+			tradeDate: "2025-01-15", orderDate: "2025-01-15", valueDate: "2025-01-17",
 			// This is the older layout, whose mono body font is StandardEncoding:
 			// gxpdf decodes it as WinAnsi, so "Großbritannien" arrives as
 			// "Groûbritannien" and yields no country unless extractTextFromPDF
@@ -912,7 +913,7 @@ func TestAllFixturesParse(t *testing.T) {
 			file: "verkauf_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
 			orderNumber: "990000099/1", transactionNumber: "9900000099",
 			depotNumber: "99000000091", depotHolder: "Wallner, Sophie",
-			date: "2024-12-18", orderDate: "2024-12-17", valueDate: "2024-12-20",
+			tradeDate: "2024-12-18", orderDate: "2024-12-17", valueDate: "2024-12-20",
 			executionTime:  "13:56",
 			depositCountry: "GB", tradeType: "SELL",
 			securityName: "VANGUARD S&P 500 ETF",
@@ -921,28 +922,32 @@ func TestAllFixturesParse(t *testing.T) {
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
 			orderNumber: "660000111/1", transactionNumber: "6600000066",
-			date: "2026-01-29", valueDate: "2026-01-30", executionTime: "16:00",
+			tradeDate: "2026-01-29", valueDate: "2026-01-30", executionTime: "16:00",
 		},
 		{
 			file: "orderbestaetigung_sample_1.pdf", docType: "ORDER", wantTransactions: 2,
 			orderNumber: "770000111",
 			depotNumber: "77000000071", depotHolder: "Hofer, Lukas",
-			date: "2026-01-28",
+			// A pending order has an Auftr.Datum and no execution: no trade date.
+			orderDate: "2026-01-28",
 		},
 		{
 			file: "dividend_sample_1.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "33000000031", depotHolder: "Österreicher, Johann",
-			date: "2025-10-01", valueDate: "2025-10-01",
+			// A dividend states only a Valuta — no trade, so no trade date.
+			valueDate: "2025-10-01",
 		},
 		{
 			file: "dividend_sample_2.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "44000000041", depotHolder: "Gruber, Anna-Maria",
-			date: "2025-10-01", valueDate: "2025-10-01",
+			// A dividend states only a Valuta — no trade, so no trade date.
+			valueDate: "2025-10-01",
 		},
 		{
 			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
 			depotNumber: "55000000051", depotHolder: "Dr. Klaus Bergmann",
-			date: "2025-01-15", valueDate: "2025-01-17", tradeType: "BUY",
+			// A Sammelabrechnung row prints Buchtag and Valuta, never a Handelstag.
+			bookingDate: "2025-01-15", valueDate: "2025-01-17", tradeType: "BUY",
 		},
 	}
 
@@ -977,7 +982,8 @@ func TestAllFixturesParse(t *testing.T) {
 					txs[0].TransactionNumber, tc.transactionNumber)
 			}
 			for _, d := range []struct{ name, got, want string }{
-				{"date", txs[0].Date, tc.date},
+				{"trade date", txs[0].TradeDate, tc.tradeDate},
+				{"booking date", txs[0].BookingDate, tc.bookingDate},
 				{"order date", txs[0].OrderDate, tc.orderDate},
 				{"value date", txs[0].ValueDate, tc.valueDate},
 				{"execution time", txs[0].ExecutionTime, tc.executionTime},
@@ -1036,8 +1042,8 @@ func TestParseTradeUsesHandelstagNotLetterDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTrade failed: %v", err)
 	}
-	if tx.Date != "2025-09-12" {
-		t.Errorf("Date = %q, want the Handelstag 2025-09-12", tx.Date)
+	if tx.TradeDate != "2025-09-12" {
+		t.Errorf("Date = %q, want the Handelstag 2025-09-12", tx.TradeDate)
 	}
 	if tx.OrderDate != "2025-09-15" {
 		t.Errorf("OrderDate = %q, want the Auftragsdatum 2025-09-15", tx.OrderDate)
@@ -1058,14 +1064,23 @@ func TestParseTradeDateFallback(t *testing.T) {
 		want   string // "" means parseTrade must fail
 	}{
 		{
-			"falls back to Auftragsdatum",
-			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "2025-09-15",
-		},
-		{
 			"falls back to Schlusstag",
 			"             Graz, 16.09.2025\nSchlusstag: 11.09.2025, 16:00 Uhr\n", "2025-09-11",
 		},
+		{
+			"falls back to Ausführungsdatum",
+			"             Graz, 16.09.2025\nAusführungsdatum   15.09.2025\n", "2025-09-15",
+		},
 		{"letter date alone is not a trade date", "             Graz, 16.09.2025\n", ""},
+		{
+			// Auftragsdatum used to close the fallback chain, so a document
+			// with no Handelstag reported the day the order was placed as the
+			// day it executed. Those are different facts, order_date already
+			// carries the first, and a trade confirmation that states neither
+			// execution label has no trade date to report.
+			"Auftragsdatum is not a trade date",
+			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "",
+		},
 	}
 
 	for _, tc := range cases {
@@ -1076,15 +1091,15 @@ func TestParseTradeDateFallback(t *testing.T) {
 			tx, err := parseTrade(doc)
 			if tc.want == "" {
 				if err == nil {
-					t.Fatalf("expected an error, got Date=%q", tx.Date)
+					t.Fatalf("expected an error, got Date=%q", tx.TradeDate)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("parseTrade failed: %v", err)
 			}
-			if tx.Date != tc.want {
-				t.Errorf("Date = %q, want %q", tx.Date, tc.want)
+			if tx.TradeDate != tc.want {
+				t.Errorf("Date = %q, want %q", tx.TradeDate, tc.want)
 			}
 		})
 	}

@@ -11,7 +11,7 @@ import (
 // order, as the generic CSV export's column headers.
 var csvHeader = []string{
 	"source", "order_number", "transaction_number", "document_type", "isin", "wkn",
-	"security_name", "date", "order_date", "value_date", "execution_time", "type", "quantity", "price",
+	"security_name", "order_date", "trade_date", "booking_date", "value_date", "execution_time", "type", "quantity", "price",
 	"gross_amount", "gross_currency",
 	"provision", "own_expenses", "foreign_expenses", "total_costs",
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
@@ -38,7 +38,7 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	for _, t := range txns {
 		row := []string{
 			t.Source, t.OrderNumber, t.TransactionNumber, t.DocumentType, t.ISIN, t.WKN,
-			t.SecurityName, t.Date, t.OrderDate, t.ValueDate, t.ExecutionTime, t.Type,
+			t.SecurityName, t.OrderDate, t.TradeDate, t.BookingDate, t.ValueDate, t.ExecutionTime, t.Type,
 			formatFloatPtr(t.Quantity), formatFloatPtr(t.Price),
 			formatFloatPtr(t.GrossAmount), t.GrossCurrency,
 		}

@@ -62,9 +62,10 @@ Key fields (most are `omitempty`):
 | `security_name` | name when there is no ISIN (crypto) or for orders |
 | `order_number`, `transaction_number` | Auftragsnummer / Transaktion-Nr. |
 | `type` | `BUY` / `SELL` |
-| `date` | ISO `YYYY-MM-DD`. Trade date (Handelstag/Schlusstag/Buchtag) for trades, Valuta for dividends and interest — **not** the letter date printed at the top of the page |
+| `trade_date` | ISO `YYYY-MM-DD`. Handelstag / Schlusstag / Ausführungsdatum — when the trade executed, **not** the letter date at the top of the page. TRADE and CRYPTO only |
 | `order_date`, `value_date` | Auftragsdatum / Valuta, ISO `YYYY-MM-DD` |
-| `execution_time` | Ausführungszeit as `"HH:MM"` — a bare local time, no date and no zone; the day is `date` |
+| `booking_date` | Buchtag, ISO `YYYY-MM-DD`. SAVINGSPLAN only — those rows state no Handelstag, so they have no `trade_date` |
+| `execution_time` | Ausführungszeit as `"HH:MM"` — a bare local time, no date and no zone; the day is `trade_date` |
 | `quantity`, `price` | numbers (decimals normalized); `price` is per unit, in EUR |
 | `gross_amount`, `gross_currency`, `net_amount`, `net_currency` | settlement amounts, the **same fields on every document type**: `gross_amount` is Kurswert on a trade and Bruttoausschüttung on a dividend, `net_amount` is always Endbetrag. `net_amount` is the only signed field — negative for a buy; `gross_amount`, `withholding_tax` and `costs` are unsigned, with the direction given by `type` |
 | `costs` | charge block — `provision`, `own_expenses`, `foreign_expenses`, `total`, and a `foreign_expenses_breakdown` itemisation of `foreign_expenses` (the document's `* Fremde Spesen` footnote). Absent when the document has no charge block; zeros inside it are real. Use `costs.total` as the transaction's cost — the breakdown entries are already part of it |
@@ -89,6 +90,10 @@ Key fields (most are `omitempty`):
   page or an exact sum of printed numbers (`costs.total` is the only sum). A
   field the document does not state is **absent** — no Devisenkurs means no
   `exchange_rate` key, not a default of 1. Use `.get()`, do not assume a key.
+- There is **no `date` field**. Each date has its own key and appears only when
+  the document prints it. To sort or group a mixed batch by one date, use
+  `trade_date or booking_date or value_date` — the same order `-format pp`
+  uses for its Datum column.
 - A `SAVINGSPLAN` row yields only `quantity`, `price` and `net_amount`; it
   prints no Kurswert and no fee line, so it has no `gross_amount` and no
   `costs`. `-format pp` still derives the withheld fee for Portfolio

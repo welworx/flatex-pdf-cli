@@ -15,7 +15,7 @@ All extracted transactions are returned as JSON objects with the following struc
   "document_type": "TRADE",
   "isin": "DE0005140008",
   "wkn": "514000",
-  "date": "2024-06-15",
+  "trade_date": "2024-06-15",
   "order_date": "2024-06-13",
   "value_date": "2024-06-17",
   "execution_time": "13:56",
@@ -60,7 +60,7 @@ All extracted transactions are returned as JSON objects with the following struc
 - `isin` — ISIN of the security
 - `wkn` — German securities identification number (if available)
 - `security_name` — Bezeichnung of the security, if the document prints one
-- `date` — Transaction date in YYYY-MM-DD format. See [Which date is `date`?](#which-date-is-date).
+- Dates — see [Dates](#dates). Every date is ISO YYYY-MM-DD.
 
 ## A stated `0,00` is not a missing value
 
@@ -162,18 +162,40 @@ The parser rejects a withheld tax that exceeds 27.5% of a stated gain, or a
 refund on a gain, since either means a figure landed in the wrong column. It
 never rejects a tax that is merely lower than the rate would suggest.
 
-## Which date is `date`?
+## Dates
 
-A flatex trade confirmation prints four dates, and they are frequently
-different days:
+One field per date the document prints, each present only when it does:
 
 | Label | Meaning | Field |
 |---|---|---|
 | `Graz, …` | Letter/print date — when the PDF was generated | *not extracted* |
 | `Auftragsdatum` | When the order was placed | `order_date` |
-| `Handelstag` (`Schlusstag` on crypto, `Buchtag` on savings plans) | When the trade executed | `date` |
+| `Handelstag` / `Schlusstag` / `Ausführungsdatum` | When the trade executed | `trade_date` |
 | `Ausführungszeit` | Time of day the trade executed | `execution_time` |
+| `Buchtag` | When a savings-plan row was booked | `booking_date` |
 | `Valuta` | When cash and securities settle | `value_date` |
+
+**`trade_date` is the standard term** for the day a deal is struck — the
+counterpart to the value date, and what T+2 counts from. flatex writes it three
+different ways depending on the layout (`Handelstag` on a trade confirmation,
+`Schlusstag` on crypto, `Ausführungsdatum` on older forms); all three denote
+the same thing and land in the same field.
+
+`Buchtag` is **not** folded into it. A `Sammelabrechnung` row states a booking
+day and a Valuta and no `Handelstag` at all, so those rows carry a
+`booking_date` and no `trade_date` — they have no confirmed execution day to
+report. Pure cash events (`DIVIDEND`, `INTEREST`, `ACCUMULATING`) have neither;
+they carry `value_date`. A pending `ORDER` has not executed, so it carries only
+`order_date`.
+
+> **Removed in v0.3.0.** There used to be a single `date` field holding
+> whichever of these mattered for the document type — the trade date on a
+> trade, the value date on a dividend. It read as an extracted field and was
+> not one: its meaning changed underneath a consumer depending on what it was
+> looking at. Picking a primary date is a decision for whoever needs one, so
+> the Portfolio Performance export makes it and the extracted data no longer
+> pretends to. If you relied on `date`, the equivalent is
+> `trade_date ?? booking_date ?? value_date`.
 
 `execution_time` is `"HH:MM"`. The document prints a bare local time with no
 date and no zone (`Ausführungszeit    13:56 Uhr`), so it stays a time rather
@@ -243,7 +265,7 @@ meaningful, summing `gross_amount` across one is not.
 - `order_date` — Auftragsdatum, when the order was placed
 - `value_date` — Valuta, when the trade settles
 - `execution_time` — Ausführungszeit as `"HH:MM"`; see
-  [Which date is `date`?](#which-date-is-date)
+  [Dates](#dates)
 - `custody_type` — Verwahrart, e.g. `Wertpapierrechnung`
 - `depositary` — Lagerstelle, e.g. `Clearstream Lux.`
 - `deposit_country` — Lagerland, translated to an ISO 3166-1 alpha-2 code
@@ -329,7 +351,7 @@ With `-include-metadata`, the transaction list is wrapped in an object with depo
     "account_number": "9876543210"
   },
   "transactions": [
-    { "document_type": "TRADE", "isin": "DE0005140008", "date": "2024-06-15" }
+    { "document_type": "TRADE", "isin": "DE0005140008", "trade_date": "2024-06-15" }
   ]
 }
 ```
