@@ -30,8 +30,8 @@ turns them into structured data.
 
 - **Seven document types** — trades, dividends, interest, accumulating funds, orders, crypto settlements, savings plans
 - **Three output formats** — JSON, CSV, and Portfolio Performance import files (English or German)
-- **Every charge, itemised** — Provision, Eigene/Fremde Spesen and the full Gebühren breakdown (Courtage, Tradinggebühr, Regulierung, …), plus a ready-to-use total
-- **Unambiguous dates** — trade date, order date and value date are separate fields, not one guess
+- **Every charge, itemised** — commission and both expense lines, plus the fee breakdown printed beneath them and an exact total (`Provision`, `Eigene`/`Fremde Spesen`, `Courtage`, `Tradinggebühr`, `Regulierung`, …)
+- **Unambiguous dates** — trade date, order date, booking date and value date are separate fields; no catch-all date whose meaning shifts by document type
 - **Batch processing** — single PDFs or whole directory trees; one bad file never aborts the batch
 - **Depot metadata & audit trail** — optionally include depot number/holder and per-transaction source filename
 - **AI-agent ready** — ships a Claude Code skill so coding agents can drive the CLI
@@ -50,12 +50,19 @@ flatex-pdf-cli ~/Downloads/statement.pdf
   {
     "document_type": "DIVIDEND",
     "isin": "IE00B3RBWM25",
+    "wkn": "A1JX52",
     "value_date": "2025-10-01",
     "quantity": 74.45,
-    "distribution_per_share": 0.4227450,
     "gross_amount": 31.47,
+    "gross_currency": "USD",
+    "withholding_tax": 4.41,
+    "withholding_tax_currency": "EUR",
+    "exchange_rate": 1.172400,
     "net_amount": 22.43,
-    "net_currency": "EUR"
+    "net_currency": "EUR",
+    "distribution_per_share": 0.4227450,
+    "distribution_currency": "USD",
+    "ex_date": "2025-09-18"
   }
 ]
 ```
@@ -97,7 +104,7 @@ flatex-pdf-cli path/to/documents/
 - `-format FORMAT` — Output format: `json` (default), `csv`, or `pp` (Portfolio Performance)
 - `-lang LANG` — Language for `pp` output: `en` (default) or `de`
 - `-include-source` — Add source filename to each transaction
-- `-include-metadata` — Wrap output with depot metadata
+- `-include-metadata` — Wrap output with depot metadata; fails if the batch spans more than one depot
 - `-quiet` — Hide skipped/problematic files; emit only valid JSON
 - `-verbose` — Print progress to stderr: how many files parsed
 - `-version` — Show version and exit
@@ -199,8 +206,8 @@ with depot metadata:
       "document_type": "TRADE",
       "isin": "DE0005140008",
       "wkn": "514000",
-      "trade_date": "2024-06-15",
       "order_date": "2024-06-13",
+      "trade_date": "2024-06-15",
       "value_date": "2024-06-17",
       "execution_time": "13:56",
       "type": "BUY",
@@ -235,7 +242,7 @@ with depot metadata:
 }
 ```
 
-Five things worth knowing before you use the numbers:
+Six things worth knowing before you use the numbers:
 
 - **Numbers keep the document's own precision, and nothing is rounded.**
   `Kurs : 110,000000 EUR` emits as `110.000000` and `Ausgeführt : 14 St.` as
@@ -246,7 +253,7 @@ Five things worth knowing before you use the numbers:
   exact sum of numbers printed on the page — `costs.total` is the only figure
   of the second kind. A field the statement does not state is omitted rather
   than filled in: no Devisenkurs means no `exchange_rate`, not a default of
-  `1`; a savings-plan row that prints only Stücke, Kurs and Betrag yields
+  `1`; a savings-plan row that prints only `Stücke`, `Kurs` and `Betrag` yields
   exactly `quantity`, `price` and `net_amount`.
 - **One field per date the document prints**, and no catch-all `date`.
   `trade_date` is the `Handelstag` (`Schlusstag` on crypto,
@@ -285,7 +292,7 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 ## Known Limitations
 
 - **Savings-plan rows carry no charge, because the document prints none.** A
-  `Sammelabrechnung aus` states only Stücke, Ausf.-Kurs and Betrag per row: a
+  `Sammelabrechnung aus` states only `Stücke`, `Ausf.-Kurs` and `Betrag` per row: a
   200,00 EUR execution at 134,2400 EUR buys 1,478695 shares. flatex withholds a
   fee — the shares are worth slightly less than the cash that moved — but no
   line names it, so the JSON and CSV report `quantity`, `price` and
