@@ -83,6 +83,29 @@ settlement validation. A stated zero is now validated like any other value.
 `exchange_rate` is the one exception: it is never absent, defaulting to `1.0`
 when the document prints no Devisenkurs.
 
+## Withholding tax (Austrian KESt)
+
+`withholding_tax` is **extracted, never computed** — flatex works the figure
+out itself, including every offset this tool cannot see, so it is read off the
+document as stated.
+
+Austrian Kapitalertragsteuer is levied on the `gain_loss`, and the value is
+signed:
+
+- **A gain withholds tax** — a positive amount, at most 27.5% of the gain.
+  It is very often much less: the gain is netted against the
+  Verluststeuertopf first (`verkauf_sample_1` withholds 24.51 on a gain of
+  403.97, i.e. 6.07%), and Altbestand acquired before the regime took effect
+  is exempt, so `0` on a real gain is valid.
+- **A loss can refund tax** — a negative amount, paid back out of the
+  Verluststeuertopf, and only up to what was already withheld earlier that
+  year. That ceiling is not stated on the document, so a refund's size is not
+  cross-checked here.
+
+The parser rejects a withheld tax that exceeds 27.5% of a stated gain, or a
+refund on a gain, since either means a figure landed in the wrong column. It
+never rejects a tax that is merely lower than the rate would suggest.
+
 ## Which date is `date`?
 
 A flatex trade confirmation prints four dates, and they are frequently

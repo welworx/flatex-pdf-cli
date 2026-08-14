@@ -21,6 +21,19 @@ const relTolerance = 0.005
 // rounding is warranted.
 const absTolerance = 0.01
 
+// austrianKEStRate is the Austrian Kapitalertragsteuer rate on realised capital
+// gains. flatex computes the withheld tax itself and this package only extracts
+// it — the rate is never used to recompute the figure, only as a ceiling on it.
+//
+// The withheld amount can legitimately fall far below the rate and this must
+// not be flagged: it is netted against the Verluststeuertopf (the corpus's only
+// sale withholds 24.51 on a gain of 403.97, i.e. 6.07%), and Altbestand bought
+// before the regime took effect is exempt entirely, so 0,00 on a real gain is
+// valid too. What cannot happen is withholding *more* than the rate allows on
+// the stated gain, which is what a value that landed in the wrong column looks
+// like.
+const austrianKEStRate = 0.275
+
 // maxUnitemisedShare bounds the charge that may be recovered from the gap
 // between what a savings-plan row settled and what its shares are worth. The
 // observed gap is a flat 1.50 EUR on a 200.00 EUR order, so the ceiling sits
@@ -83,6 +96,9 @@ func validateTransaction(t *schema.Transaction) error {
 				return err
 			}
 		}
+		if err := checkWithholdingTax(t); err != nil {
+			return err
+		}
 		return checkSettlement(t)
 
 	case "CRYPTO":
@@ -91,6 +107,9 @@ func validateTransaction(t *schema.Transaction) error {
 		// value from them can be off by several percent on small positions:
 		// the check would be either useless or a source of false alarms. The
 		// settlement identity below covers these documents exactly instead.
+		if err := checkWithholdingTax(t); err != nil {
+			return err
+		}
 		return checkSettlement(t)
 
 	case "DIVIDEND":
@@ -142,6 +161,33 @@ func checkSettlement(t *schema.Transaction) error {
 	}
 	return fmt.Errorf("settlement total %.2f does not equal gross %.2f %s costs %.2f %s tax %.2f (expected %.2f): the statement layout may have changed",
 		got, grossValue, verb, t.TotalCosts(), verb, tax, want)
+}
+
+// checkWithholdingTax bounds the withheld KESt against the gain the same
+// document states. Austrian KESt is levied on the Gewinn/Verlust, so on a gain
+// the two are related and a tax that exceeds the statutory share of that gain
+// means one of the two figures did not land in the field it belongs to.
+//
+// On a loss nothing is checked. A realised loss can refund tax already withheld
+// earlier in the year (Verluststeuertopf), so the withheld amount is negative
+// and bounded by that year's prior withholdings — a figure this document does
+// not carry and this package cannot reconstruct.
+func checkWithholdingTax(t *schema.Transaction) error {
+	if t.GainLoss == nil || t.WithholdingTax == nil {
+		return nil
+	}
+	gain, tax := *t.GainLoss, *t.WithholdingTax
+	if gain <= 0 {
+		return nil
+	}
+	if tax < 0 {
+		return fmt.Errorf("withheld tax %.2f is negative on a gain of %.2f: a refund arises from a loss, not a gain, so the statement layout may have changed", tax, gain)
+	}
+	if ceiling := gain*austrianKEStRate + absTolerance; tax > ceiling {
+		return fmt.Errorf("withheld tax %.2f exceeds %.1f%% of the stated gain %.2f (at most %.2f): the statement layout may have changed",
+			tax, austrianKEStRate*100, gain, ceiling)
+	}
+	return nil
 }
 
 // checkProduct verifies that stated == a*b within tolerance. It is skipped when

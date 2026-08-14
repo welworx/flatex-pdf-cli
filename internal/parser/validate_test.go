@@ -103,6 +103,49 @@ func TestValidateTransaction(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "KESt far below the rate is normal, not a fault",
+			// verkauf_sample_1's real figures: 24.51 withheld on a gain of
+			// 403.97 is 6.07%, because the gain is netted against the
+			// Verluststeuertopf. A check expecting ~27.5% would reject the only
+			// real sale in the corpus.
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(403.97), WithholdingTax: amt(24.51)},
+			wantErr: false,
+		},
+		{
+			name:    "Altbestand withholds nothing on a real gain",
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(500.00), WithholdingTax: amt(0)},
+			wantErr: false,
+		},
+		{
+			name:    "KESt at exactly the rate is allowed",
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(400.00), WithholdingTax: amt(110.00)},
+			wantErr: false,
+		},
+		{
+			name: "KESt above the rate cannot come from this gain",
+			// 50.00 withheld on a 100.00 gain is 50%, which no Austrian rate
+			// produces: one of the two figures is in the wrong column.
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(100.00), WithholdingTax: amt(50.00)},
+			wantErr: true,
+		},
+		{
+			name:    "a gain must not refund tax",
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(100.00), WithholdingTax: amt(-10.00)},
+			wantErr: true,
+		},
+		{
+			name: "a loss may refund tax withheld earlier in the year",
+			// Verluststeuertopf: the refund is bounded by prior withholdings,
+			// which this document does not state, so nothing is checked.
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(-200.00), WithholdingTax: amt(-55.00)},
+			wantErr: false,
+		},
+		{
+			name:    "a loss that withheld nothing is fine",
+			txn:     &schema.Transaction{DocumentType: "TRADE", GainLoss: amt(-200.00), WithholdingTax: amt(0)},
+			wantErr: false,
+		},
+		{
 			name:    "dividend reconciles",
 			txn:     &schema.Transaction{DocumentType: "DIVIDEND", Quantity: amt(74.45), DistributionPerShare: amt(0.4227), DistributionCurrency: "USD", GrossAmount: amt(31.47), GrossCurrency: "USD"},
 			wantErr: false,

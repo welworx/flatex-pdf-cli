@@ -211,7 +211,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	withholdingTax := floatPtr(extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`))
+	withholdingTax := floatPtr(extractFloat(text, `Einbeh\. Steuer:\s*(-?[\d.,]+)\s*EUR`))
 	gainLoss := floatPtr(extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`))
 	finalAmount := floatPtr(extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`))
 
@@ -339,14 +339,14 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*(-?[\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
 	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
-	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*-?[\d\s.,]+\s*([A-Z]{3})`)
 	if withholdingTaxCurrency == "" {
 		withholdingTaxCurrency = "EUR"
 	}
@@ -427,14 +427,14 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*(-?[\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
 	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
-	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*-?[\d\s.,]+\s*([A-Z]{3})`)
 	if withholdingTaxCurrency == "" {
 		withholdingTaxCurrency = "EUR"
 	}

@@ -302,6 +302,50 @@ func TestParseOrderConfirmation(t *testing.T) {
 	}
 }
 
+// TestParseRefundedWithholdingTax covers a negative "Einbeh. KESt"/"Einbeh.
+// Steuer". Austrian KESt is levied on the Gewinn/Verlust, so a realised loss
+// refunds tax already withheld earlier in the year out of the
+// Verluststeuertopf and the document states the amount with a minus sign.
+// Every document type has to accept it: the extraction patterns once required
+// a leading digit, which made the whole statement fail to parse rather than
+// yield a negative figure.
+func TestParseRefundedWithholdingTax(t *testing.T) {
+	cases := []struct {
+		docType string
+		text    string
+		want    float64
+	}{
+		{
+			"TRADE",
+			"Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nGewinn/Verlust: -120,00 EUR **Einbeh. KESt : -33,00 EUR\nAusführungsdatum : 15.06.2026",
+			-33.00,
+		},
+		{
+			"DIVIDEND",
+			"Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : -5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR",
+			-5.39,
+		},
+		{
+			"INTEREST",
+			"ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : -3,40 EUR\nEndbetrag : 28,90 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026",
+			-3.40,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.docType, func(t *testing.T) {
+			doc := &extractor.ExtractedDocument{Filename: "x.pdf", Text: tc.text, DocumentType: tc.docType}
+			txs, err := Parse(doc)
+			if err != nil {
+				t.Fatalf("a refunded tax must parse, got: %v", err)
+			}
+			if got := schema.Amount(txs[0].WithholdingTax); got != tc.want {
+				t.Errorf("withholding tax = %.2f, want %.2f", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestParseDividend tests parsing a DIVIDEND statement.
 func TestParseDividend(t *testing.T) {
 	text := "Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : 5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR"
