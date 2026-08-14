@@ -13,10 +13,10 @@ func TestWriteCSVHeaderAndRow(t *testing.T) {
 		{
 			DocumentType: "TRADE",
 			ISIN:         "IE000YU9K6K2",
-			Date:         "2024-06-15",
+			TradeDate:    "2024-06-15",
 			Type:         "BUY",
-			Quantity:     1.5,
-			GrossValue:   50.01,
+			Quantity:     amt(1.5),
+			GrossAmount:  amt(50.01),
 		},
 	}
 
@@ -37,17 +37,30 @@ func TestWriteCSVHeaderAndRow(t *testing.T) {
 	}
 }
 
-func TestWriteCSVZeroFloatIsLiteralZero(t *testing.T) {
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15"}}
-
-	var buf bytes.Buffer
-	if err := WriteCSV(&buf, txns); err != nil {
-		t.Fatalf("WriteCSV failed: %v", err)
+// TestWriteCSVDistinguishesStatedZeroFromAbsent pins the rule for every amount
+// column: a figure the document actually printed as 0,00 renders as a literal
+// 0, while one the document never printed leaves the cell empty. Collapsing the
+// two is what made a genuine zero read back as a parse failure.
+func TestWriteCSVDistinguishesStatedZeroFromAbsent(t *testing.T) {
+	render := func(t *testing.T, tx *schema.Transaction) []string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := WriteCSV(&buf, []*schema.Transaction{tx}); err != nil {
+			t.Fatalf("WriteCSV failed: %v", err)
+		}
+		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	}
 
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if got := csvField(t, lines, "quantity"); got != "0" {
-		t.Errorf("expected zero quantity to render as \"0\", got %q", got)
+	absent := render(t, &schema.Transaction{DocumentType: "TRADE", ISIN: "X", TradeDate: "2024-06-15"})
+	if got := csvField(t, absent, "quantity"); got != "" {
+		t.Errorf("a quantity the document never stated must render empty, got %q", got)
+	}
+
+	stated := render(t, &schema.Transaction{
+		DocumentType: "TRADE", ISIN: "X", TradeDate: "2024-06-15", Quantity: amt(0),
+	})
+	if got := csvField(t, stated, "quantity"); got != "0.00" {
+		t.Errorf("a stated 0,00 quantity must render as \"0.00\", got %q", got)
 	}
 }
 
@@ -57,9 +70,9 @@ func TestWriteCSVZeroFloatIsLiteralZero(t *testing.T) {
 // from a document that never had a Provision line.
 func TestWriteCSVCostColumnsBlankWithoutCostBlock(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "DIVIDEND", ISIN: "X", Date: "2024-06-15"},
-		{DocumentType: "TRADE", ISIN: "Y", Date: "2024-06-15",
-			Costs: &schema.Costs{Provision: 0, ForeignExpenses: 3, Total: 3}},
+		{DocumentType: "DIVIDEND", ISIN: "X", TradeDate: "2024-06-15"},
+		{DocumentType: "TRADE", ISIN: "Y", TradeDate: "2024-06-15",
+			Costs: &schema.Costs{Provision: schema.Num(0, 2), ForeignExpenses: schema.Num(3, 2), Total: schema.Num(3, 2)}},
 	}
 
 	var buf bytes.Buffer
@@ -74,11 +87,11 @@ func TestWriteCSVCostColumnsBlankWithoutCostBlock(t *testing.T) {
 		}
 	}
 	row := []string{lines[0], lines[2]}
-	if got := csvField(t, row, "provision"); got != "0" {
-		t.Errorf("charged nothing: expected provision \"0\", got %q", got)
+	if got := csvField(t, row, "provision"); got != "0.00" {
+		t.Errorf("charged nothing: expected provision \"0.00\", got %q", got)
 	}
-	if got := csvField(t, row, "total_costs"); got != "3" {
-		t.Errorf("expected total_costs \"3\", got %q", got)
+	if got := csvField(t, row, "total_costs"); got != "3.00" {
+		t.Errorf("expected total_costs \"3.00\", got %q", got)
 	}
 }
 

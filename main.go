@@ -36,7 +36,7 @@ func main() {
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
-	verbose := flag.Bool("verbose", false, "print progress to stderr: files parsed and any charge derived rather than read from the document")
+	verbose := flag.Bool("verbose", false, "print progress to stderr: how many files parsed")
 	flag.Parse()
 
 	args := flag.Args()
@@ -60,7 +60,15 @@ func main() {
 
 	// Process PDFs; a file that fails to extract or parse is reported and
 	// skipped so the rest of the batch still produces output.
-	transactions, metadata, errs := processPDFs(pdfFiles, *includeSource)
+	transactions, metadata, errs, metaErr := processPDFs(pdfFiles, *includeSource)
+	// Only fatal when the metadata was actually asked for. Without the flag a
+	// mixed-depot directory is a fine thing to parse; with it, there is no
+	// honest depot block to write, and writing none silently would be read as
+	// "these documents carried no depot".
+	if metaErr != nil && *includeMetadata {
+		fmt.Fprintf(os.Stderr, "error: %v\n", metaErr)
+		os.Exit(1)
+	}
 	if !*quiet {
 		for _, e := range errs {
 			fmt.Fprintf(os.Stderr, "skipped %v\n", e)
@@ -74,17 +82,6 @@ func main() {
 	if *verbose {
 		fmt.Fprintf(os.Stderr, "parsed %d transaction(s) from %d of %d file(s)\n",
 			len(transactions), len(pdfFiles)-len(errs), len(pdfFiles))
-		// Charges recovered from a settlement gap are the one set of figures
-		// here that the document never printed, so show the arithmetic that
-		// produced them rather than only the result.
-		for _, t := range transactions {
-			if t.Costs == nil || t.Costs.Unitemised == 0 {
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "%s %s %s: charge %.2f derived, %.2f settled less %.6f x %.2f in shares (not itemised by the document)\n",
-				t.DocumentType, t.Date, t.ISIN, t.Costs.Unitemised,
-				t.GrossValue+t.Costs.Unitemised, t.Quantity, t.Price)
-		}
 	}
 
 	if err := writeOutput(*format, *outputFile, *lang, transactions, metadata, *includeMetadata); err != nil {
@@ -167,11 +164,15 @@ func writeTo(path string, fn func(io.Writer) error) error {
 }
 
 // processPDFs parses each PDF, skipping (and reporting) any that fail so one
-// bad file never aborts the batch. Returns the parsed transactions, the first
-// file's metadata, and one error per failed file.
-func processPDFs(pdfFiles []string, includeSource bool) ([]*schema.Transaction, *schema.DocumentMetadata, []error) {
+// bad file never aborts the batch. It returns the parsed transactions, the
+// depot the batch belongs to, one error per failed file, and separately the
+// error that arises when the batch belongs to more than one depot — a file
+// that fails to parse is a per-file error, but a second depot is a property
+// of the whole run and must not inflate the skipped-file count.
+func processPDFs(pdfFiles []string, includeSource bool) ([]*schema.Transaction, *schema.DocumentMetadata, []error, error) {
 	var transactions []*schema.Transaction
 	var metadata *schema.DocumentMetadata
+	var metaErr error
 	var errs []error
 
 	for _, pdfPath := range pdfFiles {
@@ -194,17 +195,32 @@ func processPDFs(pdfFiles []string, includeSource bool) ([]*schema.Transaction, 
 			transactions = append(transactions, txn)
 		}
 
-		// Capture metadata from the first file that has any.
-		if metadata == nil && (doc.DepotNumber != "" || doc.DepotHolder != "" || doc.AccountNumber != "") {
-			metadata = &schema.DocumentMetadata{
-				DepotNumber:   doc.DepotNumber,
-				DepotHolder:   doc.DepotHolder,
-				AccountNumber: doc.AccountNumber,
-			}
+		// Capture metadata from the first file that has any, and refuse to let
+		// a later file's depot be papered over by it. The output is one flat
+		// transaction list with no per-transaction depot, so a single metadata
+		// block is only truthful while every document in the batch shares it.
+		// Taking the first depot and stamping it over the rest — as this did —
+		// silently reattributes a second account's trades to the first holder.
+		if doc.DepotNumber == "" && doc.DepotHolder == "" && doc.AccountNumber == "" {
+			continue
+		}
+		md := &schema.DocumentMetadata{
+			DepotNumber:   doc.DepotNumber,
+			DepotHolder:   doc.DepotHolder,
+			AccountNumber: doc.AccountNumber,
+		}
+		switch {
+		case metadata == nil && metaErr == nil:
+			metadata = md
+		case metadata != nil && *metadata != *md:
+			metaErr = fmt.Errorf(
+				"batch spans more than one depot: %s belongs to depot %s (%s), earlier files to depot %s (%s); parse each depot separately to get metadata",
+				pdfPath, md.DepotNumber, md.DepotHolder, metadata.DepotNumber, metadata.DepotHolder)
+			metadata = nil
 		}
 	}
 
-	return transactions, metadata, errs
+	return transactions, metadata, errs, metaErr
 }
 
 // discoverPDFs finds all PDF files recursively in the given path.

@@ -21,6 +21,19 @@ const relTolerance = 0.005
 // rounding is warranted.
 const absTolerance = 0.01
 
+// austrianKEStRate is the Austrian Kapitalertragsteuer rate on realised capital
+// gains. flatex computes the withheld tax itself and this package only extracts
+// it — the rate is never used to recompute the figure, only as a ceiling on it.
+//
+// The withheld amount can legitimately fall far below the rate and this must
+// not be flagged: it is netted against the Verluststeuertopf (the corpus's only
+// sale withholds 24.51 on a gain of 403.97, i.e. 6.07%), and Altbestand bought
+// before the regime took effect is exempt entirely, so 0,00 on a real gain is
+// valid too. What cannot happen is withholding *more* than the rate allows on
+// the stated gain, which is what a value that landed in the wrong column looks
+// like.
+const austrianKEStRate = 0.275
+
 // maxUnitemisedShare bounds the charge that may be recovered from the gap
 // between what a savings-plan row settled and what its shares are worth. The
 // observed gap is a flat 1.50 EUR on a 200.00 EUR order, so the ceiling sits
@@ -30,29 +43,33 @@ const absTolerance = 0.01
 // loudly rather than be booked as a suspiciously large fee.
 const maxUnitemisedShare = 0.05
 
-// unitemisedCharge recovers the charge a settlement row does not print, as the
-// difference between the cash that moved and the value of the shares. A
-// purchase settles more than the shares are worth, a sale settles less, so the
-// charge is positive either way.
-func unitemisedCharge(tradeType string, settled, shareValue float64) (float64, error) {
-	charge := roundCents(settled - shareValue)
+// checkSavingsPlanRow verifies that a Sammelabrechnung row's columns landed
+// where they belong. A row prints Stücke, Ausf.-Kurs and Betrag; the shares are
+// worth slightly less than a purchase settled, or slightly more than a sale
+// settled, because flatex withholds a fee it never prints. That gap is
+// therefore small and one-signed, and a layout change that swapped the Kurs
+// and Betrag columns makes it neither.
+//
+// The gap is computed and thrown away. It used to be reported as
+// costs.unitemised, which meant emitting a fee no line of the document carries
+// — and one whose digits were an artefact of the quantity being printed to six
+// places rather than precision the statement has.
+func checkSavingsPlanRow(tradeType string, settled, shareValue schema.Decimal) error {
+	charge := schema.Sub(settled, shareValue)
 	if tradeType == "SELL" {
-		charge = roundCents(shareValue - settled)
+		charge = schema.Sub(shareValue, settled)
 	}
-	if charge < 0 || charge > math.Abs(settled)*maxUnitemisedShare {
-		return 0, fmt.Errorf(
-			"settled amount %.2f and share value %.2f differ by %.2f, which is too large to be an unitemised charge: the statement layout may have changed",
+	// The lower bound allows a cent of slack rather than demanding a
+	// non-negative gap: rebuilt from a six-decimal quantity, a row that really
+	// charged nothing computes to -0.00000328. That is noise in the last
+	// places, not a negative fee, and it is far below the swapped-column error
+	// this bound exists to catch.
+	if v := charge.Float(); v < -absTolerance || v > math.Abs(settled.Float())*maxUnitemisedShare {
+		return fmt.Errorf(
+			"settled amount %s and share value %s differ by %s, which is not a plausible withheld charge: the statement layout may have changed",
 			settled, shareValue, charge)
 	}
-	return charge, nil
-}
-
-// roundCents snaps a computed amount to whole cents. Reconstructing a share
-// value from a printed quantity lands fractions of a cent off, and a currency
-// amount carried at that precision only propagates noise into every figure
-// derived from it.
-func roundCents(v float64) float64 {
-	return math.Round(v*100) / 100
+	return nil
 }
 
 // validate cross-checks amounts that a document states in more than one place.
@@ -78,10 +95,13 @@ func validateTransaction(t *schema.Transaction) error {
 		// Kurs is only ever extracted in EUR. When Kurswert carries a foreign
 		// currency the two are related by Devisenkurs rather than directly, so
 		// the identity does not apply.
-		if t.PriceCurrency == "EUR" {
-			if err := checkProduct("gross value", t.Quantity, t.Price, t.GrossValue); err != nil {
+		if t.GrossCurrency == "EUR" {
+			if err := checkProduct("gross value", t.Quantity, t.Price, t.GrossAmount); err != nil {
 				return err
 			}
+		}
+		if err := checkWithholdingTax(t); err != nil {
+			return err
 		}
 		return checkSettlement(t)
 
@@ -91,6 +111,9 @@ func validateTransaction(t *schema.Transaction) error {
 		// value from them can be off by several percent on small positions:
 		// the check would be either useless or a source of false alarms. The
 		// settlement identity below covers these documents exactly instead.
+		if err := checkWithholdingTax(t); err != nil {
+			return err
+		}
 		return checkSettlement(t)
 
 	case "DIVIDEND":
@@ -119,29 +142,68 @@ func validateTransaction(t *schema.Transaction) error {
 // exactly, which makes it the strongest signal available that every figure
 // landed in the field it belongs to.
 func checkSettlement(t *schema.Transaction) error {
-	// Restricted to purchases: on a sale the deductions reverse sign, and there
-	// is no sell document in the fixtures to confirm the arrangement against.
-	// Guessing at it would risk failing every future sale.
-	if t.Type != "BUY" || t.FinalAmount == 0 || t.GrossValue == 0 {
+	// Skipped only when the document states no such figure. A stated 0,00 is
+	// checked like any other value: it used to disable this check silently,
+	// which let an impossible settlement through.
+	if (t.Type != "BUY" && t.Type != "SELL") || t.NetAmount == nil || t.GrossAmount == nil {
 		return nil
 	}
-	want := t.GrossValue + t.TotalCosts() + t.WithholdingTax
-	got := math.Abs(t.FinalAmount)
+	grossValue := schema.Amount(t.GrossAmount)
+	// A purchase adds the deductions to what you pay; a sale subtracts them
+	// from what you receive. Confirmed against verkauf_sample_1: gross 1540.00
+	// less costs 8.41 less KESt 24.51 equals the stated Endbetrag of 1507.08.
+	tax := schema.Amount(t.WithholdingTax)
+	sign := 1.0
+	verb := "plus"
+	if t.Type == "SELL" {
+		sign, verb = -1.0, "less"
+	}
+	want := grossValue + sign*(t.TotalCosts()+tax)
+	got := math.Abs(schema.Amount(t.NetAmount))
 	if math.Abs(want-got) <= absTolerance {
 		return nil
 	}
-	return fmt.Errorf("settlement total %.2f does not equal gross %.2f plus costs %.2f plus tax %.2f (expected %.2f): the statement layout may have changed",
-		got, t.GrossValue, t.TotalCosts(), t.WithholdingTax, want)
+	return fmt.Errorf("settlement total %.2f does not equal gross %.2f %s costs %.2f %s tax %.2f (expected %.2f): the statement layout may have changed",
+		got, grossValue, verb, t.TotalCosts(), verb, tax, want)
+}
+
+// checkWithholdingTax bounds the withheld KESt against the gain the same
+// document states. Austrian KESt is levied on the Gewinn/Verlust, so on a gain
+// the two are related and a tax that exceeds the statutory share of that gain
+// means one of the two figures did not land in the field it belongs to.
+//
+// On a loss nothing is checked. A realised loss can refund tax already withheld
+// earlier in the year (Verluststeuertopf), so the withheld amount is negative
+// and bounded by that year's prior withholdings — a figure this document does
+// not carry and this package cannot reconstruct.
+func checkWithholdingTax(t *schema.Transaction) error {
+	if t.GainLoss == nil || t.WithholdingTax == nil {
+		return nil
+	}
+	gain, tax := t.GainLoss.Float(), t.WithholdingTax.Float()
+	if gain <= 0 {
+		return nil
+	}
+	if tax < 0 {
+		return fmt.Errorf("withheld tax %.2f is negative on a gain of %.2f: a refund arises from a loss, not a gain, so the statement layout may have changed", tax, gain)
+	}
+	if ceiling := gain*austrianKEStRate + absTolerance; tax > ceiling {
+		return fmt.Errorf("withheld tax %.2f exceeds %.1f%% of the stated gain %.2f (at most %.2f): the statement layout may have changed",
+			tax, austrianKEStRate*100, gain, ceiling)
+	}
+	return nil
 }
 
 // checkProduct verifies that stated == a*b within tolerance. It is skipped when
-// any operand is zero: a document that legitimately omits one of these figures
-// is not this check's business, the per-field extraction errors already cover
-// values that are genuinely missing.
-func checkProduct(name string, a, b, stated float64) error {
-	if a == 0 || b == 0 || stated == 0 {
+// the document states no value for one of the operands: a document that
+// legitimately omits one of these figures is not this check's business, the
+// per-field extraction errors already cover values that are genuinely missing.
+// A stated 0,00 is a value and is checked.
+func checkProduct(name string, aP, bP, statedP *schema.Decimal) error {
+	if aP == nil || bP == nil || statedP == nil {
 		return nil
 	}
+	a, b, stated := aP.Float(), bP.Float(), statedP.Float()
 	want := a * b
 	scale := math.Abs(want)
 	if scale == 0 {

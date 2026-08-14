@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
@@ -66,20 +67,20 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 		}
 		ppType, err := ppTradeType(lang, t.Type)
 		if err != nil {
-			return fmt.Errorf("%s %s: %w", t.DocumentType, t.Date, err)
+			return fmt.Errorf("%s %s: %w", t.DocumentType, ppDate(t), err)
 		}
 		row := []string{
-			t.Date,
+			ppDate(t),
 			ppType,
 			formatAmount(portfolioValue(t), lang),
-			formatAmount(t.Quantity, lang),
+			formatAmount(schema.Amount(t.Quantity), lang),
 			t.ISIN,
 			t.WKN,
 			t.SecurityName,
-			formatAmount(t.TotalCosts(), lang),
-			formatAmount(t.WithholdingTax, lang),
-			t.PriceCurrency,
-			formatAmount(t.ExchangeRate, lang),
+			formatAmount(ppFees(t), lang),
+			formatAmount(schema.Amount(t.WithholdingTax), lang),
+			ppCurrency(t),
+			formatAmount(ppExchangeRate(t), lang),
 			note(t),
 		}
 		if err := cw.Write(row); err != nil {
@@ -92,19 +93,91 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 
 // portfolioValue computes PP's "Value" column: the total cash movement of a
 // buy/sell. TRADE and CRYPTO carry flatex's own computed settlement amount
-// (Endbetrag/FinalAmount), which is signed by cash direction — negative for a
+// (Endbetrag/NetAmount), which is signed by cash direction — negative for a
 // buy. PP wants the magnitude, with Buy/Sell carried by the Type column, so
 // the sign is dropped here. SAVINGSPLAN rows have no Endbetrag, so fees are
 // added back for a buy (more cash out) and subtracted for a sell (less cash
 // in).
 func portfolioValue(t *schema.Transaction) float64 {
-	if t.FinalAmount != 0 {
-		return math.Abs(t.FinalAmount)
+	// Falls back only when the document states no Endbetrag at all. A stated
+	// 0,00 is the settlement amount, not a missing one.
+	if t.NetAmount != nil {
+		return math.Abs(t.NetAmount.Float())
 	}
+	grossValue := schema.Amount(t.GrossAmount)
 	if t.Type == "SELL" {
-		return t.GrossValue - t.TotalCosts()
+		return grossValue - t.TotalCosts()
 	}
-	return t.GrossValue + t.TotalCosts()
+	return grossValue + t.TotalCosts()
+}
+
+// ppDate fills PP's Datum column. PP's import takes exactly one date per
+// transaction, so something has to choose which of the ones a statement prints
+// that is — and this is where the choice belongs, not in the extracted data.
+//
+// The trade date is what PP wants for a portfolio transaction: it fixes the
+// price and starts the holding period. A savings-plan row states no Handelstag,
+// only a Buchtag, and a pure cash event (dividend, interest, accumulation)
+// states neither, so each falls back to the next date it does carry.
+func ppDate(t *schema.Transaction) string {
+	switch {
+	case t.TradeDate != "":
+		return t.TradeDate
+	case t.BookingDate != "":
+		return t.BookingDate
+	default:
+		return t.ValueDate
+	}
+}
+
+// ppFees fills PP's Gebühren column. Most documents itemise their charges and
+// the column is just their total.
+//
+// A savings-plan row does not: it prints Stücke, Kurs and Betrag, and the fee
+// flatex withheld shows up only as the gap between the cash that moved and
+// what the shares are worth. The extracted transaction therefore carries no
+// charge for it — a figure no line of the document states is not something an
+// extractor should report. PP is a different audience: it is accounting for
+// what the purchase cost, and dropping the fee there would understate it. So
+// the gap is derived here, at the point it is needed, and rounded to the cent
+// because that is the unit a fee is actually charged in — the further places
+// are an artefact of the quantity being printed to six decimals.
+func ppFees(t *schema.Transaction) float64 {
+	if t.Costs != nil || t.DocumentType != "SAVINGSPLAN" {
+		return t.TotalCosts()
+	}
+	shareValue := schema.Amount(t.Quantity) * schema.Amount(t.Price)
+	gap := math.Abs(schema.Amount(t.NetAmount)) - shareValue
+	if t.Type == "SELL" {
+		gap = -gap
+	}
+	if gap < 0 {
+		return 0
+	}
+	return math.Round(gap*100) / 100
+}
+
+// ppCurrency fills PP's "Currency Gross Amount" column, falling back to the
+// settlement currency when the document states no gross amount to qualify —
+// a savings-plan row prints EUR against its Kurs and Betrag but has no
+// Kurswert line, so GrossCurrency is empty and NetCurrency is what it means.
+func ppCurrency(t *schema.Transaction) string {
+	if t.GrossCurrency != "" {
+		return t.GrossCurrency
+	}
+	return t.NetCurrency
+}
+
+// ppExchangeRate fills PP's Wechselkurs column. A document that settles in EUR
+// prints no Devisenkurs, so the extracted transaction carries none — the JSON
+// reports what the statement says and says nothing where it is silent. PP does
+// need a number here, and a blank or zero rate breaks its valuation, so the
+// implied 1 is supplied at the point it is actually required.
+func ppExchangeRate(t *schema.Transaction) float64 {
+	if t.ExchangeRate == nil {
+		return 1
+	}
+	return t.ExchangeRate.Float()
 }
 
 func ppTradeType(lang, tradeType string) (string, error) {
@@ -141,20 +214,20 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 		var value float64
 		switch t.DocumentType {
 		case "DIVIDEND":
-			ppType, value = labels["DIVIDEND"], t.NetAmount
+			ppType, value = labels["DIVIDEND"], schema.Amount(t.NetAmount)
 		case "INTEREST":
-			ppType, value = labels["INTEREST"], t.NetAmount
+			ppType, value = labels["INTEREST"], schema.Amount(t.NetAmount)
 		case "ACCUMULATING":
-			if t.WithholdingTax == 0 {
+			if schema.Amount(t.WithholdingTax) == 0 {
 				continue
 			}
-			ppType, value = labels["TAXES"], t.WithholdingTax
+			ppType, value = labels["TAXES"], schema.Amount(t.WithholdingTax)
 		default:
 			continue
 		}
 		row := []string{
-			t.Date, ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
-			formatAmount(t.WithholdingTax, lang), "0", note(t),
+			ppDate(t), ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
+			formatAmount(schema.Amount(t.WithholdingTax), lang), "0", note(t),
 		}
 		if err := cw.Write(row); err != nil {
 			return err
@@ -182,11 +255,21 @@ func csvDelimiter(lang string) rune {
 // comma; PP's parser accepts a bare digit string with no thousands
 // separator, so no grouping is added.
 func formatAmount(f float64, lang string) string {
-	s := formatFloat(f)
+	s := ppFormat(f)
 	if lang == "de" {
 		s = strings.Replace(s, ".", ",", 1)
 	}
 	return s
+}
+
+// ppFormat renders a PP column value in shortest round-trip form. The CSV and
+// JSON exports carry each amount at the precision its document printed it
+// with, but PP is not that audience: it re-parses these columns and several of
+// them are derived here rather than read (see portfolioValue), so there is no
+// printed precision to honour. Padding them to the cent would also round a
+// fractional share count — 1.478695 shares is not 1.48.
+func ppFormat(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func note(t *schema.Transaction) string {

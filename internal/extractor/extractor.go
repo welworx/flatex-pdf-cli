@@ -73,8 +73,30 @@ func extractTextFromPDF(filePath string) (string, error) {
 		text.WriteString(pageText)
 	}
 
-	return strings.ToValidUTF8(text.String(), ""), nil
+	return standardEncodingFixes.Replace(strings.ToValidUTF8(text.String(), "")), nil
 }
+
+// standardEncodingFixes repairs the byte slots where Adobe StandardEncoding and
+// WinAnsiEncoding disagree. Older flatex statements set their monospaced body
+// font to StandardEncoding, but gxpdf decodes every simple font as WinAnsi, so
+// those bytes arrive as the wrong rune:
+//
+//	0xFB  germandbls (ß) -> û
+//	0xAF  fl ligature    -> ¯
+//
+// The damage is silent and load-bearing: "Lagerland: Großbritannien" arrives as
+// "Groûbritannien", which countryISO2 cannot match, so deposit_country comes out
+// empty rather than "GB".
+//
+// ponytail: only the two slots seen in real statements are mapped. The other
+// StandardEncoding differences (AE, oe, Lslash, …) do not occur in German
+// flatex text. 0xAE (fi ligature -> ®) is deliberately NOT mapped: ® is a real
+// character in security names, and rewriting it would corrupt them. Drop this
+// entirely if gxpdf ever honours the font's declared encoding.
+var standardEncodingFixes = strings.NewReplacer(
+	"û", "ß",
+	"¯", "fl",
+)
 
 // extractMetadata extracts depot number and depot holder from PDF text.
 func extractMetadata(text string) (depotNumber, depotHolder string) {

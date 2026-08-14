@@ -17,7 +17,10 @@ distributions, orders, crypto, savings plans.
 
 Don't have the PDFs yet? [**flatex-fetch**](https://github.com/welworx/flatex-fetch)
 logs into the flatex.at portal and downloads them for you; this tool then
-turns them into structured data.
+turns them into structured data. For a walkthrough of both ends of that chain —
+downloading each month's new documents, then turning them into a CSV or a
+Portfolio Performance import — see
+[**I Built a Banking Automation Tool Without Writing a Line of Go**](https://medium.com/automate-the-rest/i-built-a-banking-automation-tool-without-writing-a-line-of-go-3aa614df035a).
 
 > **Disclaimer:** This is an independent, unofficial open-source project. It is
 > **not** affiliated with, endorsed by, sponsored by, or in any way associated
@@ -30,8 +33,8 @@ turns them into structured data.
 
 - **Seven document types** — trades, dividends, interest, accumulating funds, orders, crypto settlements, savings plans
 - **Three output formats** — JSON, CSV, and Portfolio Performance import files (English or German)
-- **Every charge, itemised** — Provision, Eigene/Fremde Spesen and the full Gebühren breakdown (Courtage, Tradinggebühr, Regulierung, …), plus a ready-to-use total
-- **Unambiguous dates** — trade date, order date and value date are separate fields, not one guess
+- **Every charge, itemised** — commission and both expense lines, plus the fee breakdown printed beneath them and an exact total (`Provision`, `Eigene`/`Fremde Spesen`, `Courtage`, `Tradinggebühr`, `Regulierung`, …)
+- **Unambiguous dates** — trade date, order date, booking date and value date are separate fields; no catch-all date whose meaning shifts by document type
 - **Batch processing** — single PDFs or whole directory trees; one bad file never aborts the batch
 - **Depot metadata & audit trail** — optionally include depot number/holder and per-transaction source filename
 - **AI-agent ready** — ships a Claude Code skill so coding agents can drive the CLI
@@ -50,12 +53,19 @@ flatex-pdf-cli ~/Downloads/statement.pdf
   {
     "document_type": "DIVIDEND",
     "isin": "IE00B3RBWM25",
-    "date": "2025-10-01",
+    "wkn": "A1JX52",
+    "value_date": "2025-10-01",
     "quantity": 74.45,
-    "distribution_per_share": 0.422745,
     "gross_amount": 31.47,
+    "gross_currency": "USD",
+    "withholding_tax": 4.41,
+    "withholding_tax_currency": "EUR",
+    "exchange_rate": 1.172400,
     "net_amount": 22.43,
-    "net_currency": "EUR"
+    "net_currency": "EUR",
+    "distribution_per_share": 0.4227450,
+    "distribution_currency": "USD",
+    "ex_date": "2025-09-18"
   }
 ]
 ```
@@ -97,9 +107,9 @@ flatex-pdf-cli path/to/documents/
 - `-format FORMAT` — Output format: `json` (default), `csv`, or `pp` (Portfolio Performance)
 - `-lang LANG` — Language for `pp` output: `en` (default) or `de`
 - `-include-source` — Add source filename to each transaction
-- `-include-metadata` — Wrap output with depot metadata
+- `-include-metadata` — Wrap output with depot metadata; fails if the batch spans more than one depot
 - `-quiet` — Hide skipped/problematic files; emit only valid JSON
-- `-verbose` — Print progress to stderr: files parsed, and any charge derived rather than read from the document
+- `-verbose` — Print progress to stderr: how many files parsed
 - `-version` — Show version and exit
 
 When given a directory, the tool processes every `.pdf` it finds. A file it
@@ -199,31 +209,33 @@ with depot metadata:
       "document_type": "TRADE",
       "isin": "DE0005140008",
       "wkn": "514000",
-      "date": "2024-06-15",
       "order_date": "2024-06-13",
+      "trade_date": "2024-06-15",
       "value_date": "2024-06-17",
+      "execution_time": "13:56",
       "type": "BUY",
-      "quantity": 10.0,
-      "price": 25.50,
-      "price_currency": "EUR",
-      "gross_value": 255.00,
+      "quantity": 10,
+      "price": 25.500000,
+      "gross_amount": 255.00,
+      "gross_currency": "EUR",
+      "exchange_rate": 1.000000,
+      "net_amount": -263.50,
+      "net_currency": "EUR",
       "costs": {
         "provision": 5.50,
-        "own_expenses": 0,
+        "own_expenses": 0.00,
         "foreign_expenses": 3.00,
         "total": 8.50,
-        "fees": {
-          "courtage": 0,
+        "foreign_expenses_breakdown": {
+          "courtage": 0.00,
           "trading_fee": 0.50,
           "settlement": 2.50,
-          "closing_notes": 0,
-          "ls_allocation": 0,
-          "financial_transaction_tax": 0,
-          "other": 0
+          "closing_notes": 0.00,
+          "ls_allocation": 0.00,
+          "financial_transaction_tax": 0.00,
+          "other": 0.00
         }
       },
-      "final_amount": -263.50,
-      "final_currency": "EUR",
       "custody_type": "Wertpapierrechnung",
       "depositary": "Clearstream Lux.",
       "deposit_country": "GB",
@@ -233,35 +245,69 @@ with depot metadata:
 }
 ```
 
-Two things worth knowing before you use the numbers:
+Six things worth knowing before you use the numbers:
 
-- **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
-  crypto and savings plans) — not the date printed at the top of the letter.
-  `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
-  alongside it, and on a real statement all three are usually different days.
-  Dividends and interest use `Valuta` as their `date`, since that is when the
-  money moves.
+- **Numbers keep the document's own precision, and nothing is rounded.**
+  `Kurs : 110,000000 EUR` emits as `110.000000` and `Ausgeführt : 14 St.` as
+  `14`, because a price quoted to six places is a different claim from one
+  quoted to two. They are ordinary JSON numbers throughout, so a consumer that
+  does not care can ignore all of this.
+- **Nothing is invented, either.** Every number is printed on the page, or an
+  exact sum of numbers printed on the page — `costs.total` is the only figure
+  of the second kind. A field the statement does not state is omitted rather
+  than filled in: no Devisenkurs means no `exchange_rate`, not a default of
+  `1`; a savings-plan row that prints only `Stücke`, `Kurs` and `Betrag` yields
+  exactly `quantity`, `price` and `net_amount`.
+- **One field per date the document prints**, and no catch-all `date`.
+  `trade_date` is the `Handelstag` (`Schlusstag` on crypto,
+  `Ausführungsdatum` on older layouts) — never the date at the top of the
+  letter. `order_date` is the `Auftragsdatum`, `value_date` the `Valuta`, and
+  on a real statement all three are usually different days. A savings-plan row
+  states a `Buchtag` and no `Handelstag`, so it carries `booking_date` and no
+  trade date; dividends and interest carry only `value_date`; a pending order
+  only `order_date`. `execution_time` carries the `Ausführungszeit` as a bare
+  `"HH:MM"` — the document states no zone, so it is not folded into a
+  timestamp. If you need a single date to sort or import by, that choice is
+  yours: `trade_date ?? booking_date ?? value_date` is what the Portfolio
+  Performance export uses.
+- **The settlement fields are the same on every document type.** A trade's
+  `Kurswert` and a dividend's `Bruttoausschüttung` both land in `gross_amount`;
+  `Endbetrag` always lands in `net_amount`, whichever document it came from.
+  The identity that ties them together is
+  `net_amount = gross_amount ∓ costs.total ∓ withholding_tax` — deductions add
+  to what a purchase costs you and subtract from what a sale pays you. The
+  parser enforces it on every document it parses and fails loudly when it
+  breaks.
+- **Only `net_amount` carries a sign.** It is negative when money left the
+  account. `gross_amount`, `withholding_tax` and everything under `costs` are
+  unsigned magnitudes; which direction they apply in follows from `type`.
 - **`costs.total` is the transaction's total charge** — `Provision` plus
-  `Eigene Spesen` plus `Fremde Spesen`. The entries under `costs.fees` itemise
-  `foreign_expenses` and are already counted in the total; adding them on top
-  double-counts. `costs` is absent when a document has no charge block at all,
-  which is how a real 0,00 EUR fee stays distinguishable from an unparsed one.
+  `Eigene Spesen` plus `Fremde Spesen`. The document prints the last of those
+  as `* Fremde Spesen` and lists its components under the matching footnote, so
+  the entries in `costs.foreign_expenses_breakdown` itemise `foreign_expenses`
+  and are already counted in the total; adding them on top double-counts.
+  `costs` is absent when a document has no charge block at all, which is how a
+  real 0,00 EUR fee stays distinguishable from an unparsed one.
 
 Full field reference (common, trade, dividend, interest, accumulating, order,
 and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
-- **Savings-plan charges are derived, not read.** A `Sammelabrechnung aus`
-  prints only the amount settled per row, never a fee line: a 200,00 EUR
-  execution at 134,2400 EUR buys 1,478695 shares, which is 198,50 EUR of stock,
-  and the missing 1,50 EUR is a charge the document does not itemise. The
-  parser recovers it as that gap and reports it as `costs.unitemised`, kept
-  separate from `provision` / `own_expenses` / `foreign_expenses` because those
-  carry a label the statement actually printed and this one does not. Run with
-  `-verbose` to see the arithmetic per row. A gap that is negative, or larger
-  than 5% of the amount settled, is treated as a layout change and fails the
-  parse rather than being booked as an implausibly large fee.
+- **Savings-plan rows carry no charge, because the document prints none.** A
+  `Sammelabrechnung aus` states only `Stücke`, `Ausf.-Kurs` and `Betrag` per row: a
+  200,00 EUR execution at 134,2400 EUR buys 1,478695 shares. flatex withholds a
+  fee — the shares are worth slightly less than the cash that moved — but no
+  line names it, so the JSON and CSV report `quantity`, `price` and
+  `net_amount` and nothing more. Earlier versions reconstructed the fee and a
+  `gross_amount` from those three; both are gone, since a figure no line of the
+  statement carries is not something an extractor should assert.
+
+  The gap is still computed as a sanity check on the column layout: one that is
+  negative by more than a cent, or larger than 5% of the amount settled, is
+  treated as a layout change and fails the parse. And the Portfolio Performance
+  export still derives the fee, rounded to the cent, because PP is accounting
+  for what the purchase cost.
 - **German-language PDFs only.** Document-type detection and field extraction
   are keyed to German labels (`Wertpapierabrechnung`, `Valuta`,
   `Devisenkurs`, …); non-German statements are detected and rejected with an

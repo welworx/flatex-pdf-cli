@@ -3,7 +3,6 @@ package export
 import (
 	"encoding/csv"
 	"io"
-	"strconv"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
@@ -12,17 +11,18 @@ import (
 // order, as the generic CSV export's column headers.
 var csvHeader = []string{
 	"source", "order_number", "transaction_number", "document_type", "isin", "wkn",
-	"security_name", "date", "order_date", "type", "quantity", "price", "price_currency",
-	"gross_value", "provision", "own_expenses", "foreign_expenses", "unitemised", "total_costs",
+	"security_name", "order_date", "trade_date", "booking_date", "value_date", "execution_time", "type", "quantity", "price",
+	"gross_amount", "gross_currency",
+	"provision", "own_expenses", "foreign_expenses", "total_costs",
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
 	"fee_ls_allocation", "fee_financial_transaction_tax", "fee_other",
-	"withholding_tax", "gain_loss", "exchange_rate",
-	"final_amount", "final_currency", "custody_type", "depositary", "deposit_country",
-	"execution_venue",
-	"limit", "valid_until", "distribution_per_share", "distribution_currency",
-	"gross_amount", "gross_currency", "withholding_tax_currency", "net_amount",
-	"net_currency", "ex_date", "value_date", "interest_rate", "period_from",
-	"period_to", "reinvestment_per_share", "reinvestment_currency", "accrual_date",
+	"withholding_tax", "withholding_tax_currency", "gain_loss", "exchange_rate",
+	"net_amount", "net_currency",
+	"custody_type", "depositary", "deposit_country", "execution_venue",
+	"limit", "valid_until",
+	"distribution_per_share", "distribution_currency", "ex_date",
+	"interest_rate", "period_from", "period_to",
+	"reinvestment_per_share", "reinvestment_currency", "accrual_date",
 }
 
 // WriteCSV writes one row per transaction, dumping every schema.Transaction
@@ -38,17 +38,20 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	for _, t := range txns {
 		row := []string{
 			t.Source, t.OrderNumber, t.TransactionNumber, t.DocumentType, t.ISIN, t.WKN,
-			t.SecurityName, t.Date, t.OrderDate, t.Type, formatFloat(t.Quantity), formatFloat(t.Price), t.PriceCurrency,
-			formatFloat(t.GrossValue),
+			t.SecurityName, t.OrderDate, t.TradeDate, t.BookingDate, t.ValueDate, t.ExecutionTime, t.Type,
+			formatFloatPtr(t.Quantity), formatFloatPtr(t.Price),
+			formatFloatPtr(t.GrossAmount), t.GrossCurrency,
 		}
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
-			formatFloat(t.WithholdingTax), formatFloat(t.GainLoss), formatFloat(t.ExchangeRate),
-			formatFloat(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
-			formatFloat(t.Limit), t.ValidUntil, formatFloat(t.DistributionPerShare), t.DistributionCurrency,
-			formatFloat(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloat(t.NetAmount),
-			t.NetCurrency, t.ExDate, t.ValueDate, formatFloat(t.InterestRate), t.PeriodFrom,
-			t.PeriodTo, formatFloat(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
+			formatFloatPtr(t.WithholdingTax), t.WithholdingTaxCurrency,
+			formatFloatPtr(t.GainLoss), formatFloatPtr(t.ExchangeRate),
+			formatFloatPtr(t.NetAmount), t.NetCurrency,
+			t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
+			formatFloatPtr(t.Limit), t.ValidUntil,
+			formatFloatPtr(t.DistributionPerShare), t.DistributionCurrency, t.ExDate,
+			formatFloatPtr(t.InterestRate), t.PeriodFrom, t.PeriodTo,
+			formatFloatPtr(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
 		)
 		if err := cw.Write(row); err != nil {
 			return err
@@ -58,25 +61,43 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	return cw.Error()
 }
 
-// costColumns renders the 12 cost columns, all blank when the document had no
+// costColumns renders the 11 cost columns, all blank when the document had no
 // charge block and all zero-filled when it had one but itemised no Gebühren.
 func costColumns(c *schema.Costs) []string {
 	if c == nil {
-		return make([]string, 12)
+		return make([]string, 11)
 	}
-	f := c.Fees
+	f := c.ForeignExpensesBreakdown
 	if f == nil {
-		f = &schema.Fees{}
+		// Zero-filled as currency, so these cells read 0.00 like every other
+		// charge column rather than the bare 0 a zero-value Decimal renders.
+		z := schema.Computed(0)
+		f = &schema.FeeBreakdown{
+			Courtage: z, TradingFee: z, Settlement: z, ClosingNotes: z,
+			LSAllocation: z, FinancialTransactionTax: z, Other: z,
+		}
 	}
 	return []string{
 		formatFloat(c.Provision), formatFloat(c.OwnExpenses),
-		formatFloat(c.ForeignExpenses), formatFloat(c.Unitemised), formatFloat(c.Total),
+		formatFloat(c.ForeignExpenses), formatFloat(c.Total),
 		formatFloat(f.Courtage), formatFloat(f.TradingFee), formatFloat(f.Settlement),
 		formatFloat(f.ClosingNotes), formatFloat(f.LSAllocation),
 		formatFloat(f.FinancialTransactionTax), formatFloat(f.Other),
 	}
 }
 
-func formatFloat(f float64) string {
-	return strconv.FormatFloat(f, 'f', -1, 64)
+// formatFloat renders an amount at the precision the document printed it with,
+// so the CSV carries the same digits as the JSON.
+func formatFloat(d schema.Decimal) string {
+	return d.String()
+}
+
+// formatFloatPtr renders an optional amount, leaving the cell empty when the
+// document did not state one. Same convention costColumns uses for an absent
+// cost block, and it keeps a genuine 0 distinct from a missing value.
+func formatFloatPtr(p *schema.Decimal) string {
+	if p == nil {
+		return ""
+	}
+	return p.String()
 }

@@ -65,18 +65,23 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 
 	// flatex prints four dates in a trade header: the letter date ("Graz,
 	// 16.09.2025"), Auftragsdatum (order placed), Handelstag (executed) and
-	// Valuta (settled). Handelstag is the one that dates the position change
-	// and is what Portfolio Performance imports as the transaction date.
+	// Valuta (settled). Handelstag is the one that dates the position change.
 	// Scanning for the first date-shaped string in the document instead
 	// picked up the letter date, which is usually a day or more late.
-	date := firstNonEmpty(
+	//
+	// The three labels below are the same field under different names across
+	// layouts. Auftragsdatum used to close this chain as a last resort, which
+	// meant a document without a Handelstag reported its order date as the
+	// trade date — a wrong answer dressed as a right one, and one the
+	// order_date field already carries. A trade confirmation states when it
+	// executed; if none of these three is present, say so.
+	tradeDate := firstNonEmpty(
 		dateField(text, `Handelstag`),
 		dateField(text, `Schlusstag`),
 		dateField(text, `Ausführungsdatum`),
-		dateField(text, `Auftragsdatum`),
 	)
-	if date == "" {
-		return nil, fmt.Errorf("trade date (Handelstag) not found in document")
+	if tradeDate == "" {
+		return nil, fmt.Errorf("trade date (Handelstag/Schlusstag/Ausführungsdatum) not found in document")
 	}
 
 	// Determine trade type: "Kauf" → "BUY", "Verkauf" → "SELL"
@@ -109,11 +114,10 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
-	if err != nil {
-		exchangeRate = 1.0
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern (e.g., "IE000YU9K6K2/A3DP9J")
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -121,6 +125,12 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		// Fallback to general WKN extraction
 		wkn = extractWKN(text)
 	}
+
+	// Security name sits on the order line, between the side and "(ISIN/WKN)":
+	// "Nr.700000011/1  Kauf  L&G GOLD MINING ETF (IE00B3CNHG25/A0Q8HZ)".
+	// Older layouts print "Nr. 800000022/1" with a space after the dot.
+	securityName := extractString(text,
+		`Nr\.\s*[\d/]+\s+(?:Kauf|Verkauf)\s+(.+?)\s*\([A-Z]{2}[A-Z0-9]{9}[0-9]/`)
 
 	// Extract identifiers (all optional)
 	orderNumber := extractString(text, `Auftragsnummer\s*:?\s*(\S+)`)
@@ -130,9 +140,9 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	// Trades carry the withheld capital-gains tax as "Einbeh. KESt"; the
 	// "Einbeh. Steuer" label used on dividend and crypto documents does not
 	// appear here.
-	withholdingTax, _ := eurField(text, `Einbeh\.[^\S\n]*KESt`)
-	gainLoss, _ := eurField(text, `Gewinn/Verlust`)
-	finalAmount, _ := eurField(text, `Endbetrag`)
+	withholdingTax := floatPtr(eurField(text, `Einbeh\.[^\S\n]*KESt`))
+	gainLoss := floatPtr(eurField(text, `Gewinn/Verlust`))
+	finalAmount := floatPtr(eurField(text, `Endbetrag`))
 
 	transaction := &schema.Transaction{
 		OrderNumber:       orderNumber,
@@ -140,19 +150,21 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		DocumentType:      "TRADE",
 		ISIN:              isin,
 		WKN:               wkn,
-		Date:              date,
+		SecurityName:      securityName,
+		TradeDate:         tradeDate,
 		OrderDate:         dateField(text, `Auftragsdatum`),
 		ValueDate:         dateField(text, `Valuta`),
+		ExecutionTime:     timeField(text, `Ausführungszeit`),
 		Type:              tradeType,
-		Quantity:          quantity,
-		Price:             price,
-		PriceCurrency:     currency,
-		GrossValue:        grossValue,
+		Quantity:          ptr(quantity),
+		Price:             ptr(price),
+		GrossCurrency:     currency,
+		GrossAmount:       ptr(grossValue),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
-		FinalAmount:       finalAmount,
-		FinalCurrency:     "EUR",
+		NetAmount:         finalAmount,
+		NetCurrency:       "EUR",
 		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		Depositary:        extractString(text, `Lagerstelle[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		DepositCountry:    countryISO2(extractString(text, `Lagerland[^\S\n]*:[^\S\n]*([^\n*]+)`)),
@@ -184,8 +196,8 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	}
 
 	// Schlusstag is the trade date (may be followed by a time).
-	date := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
-	if date == "" {
+	tradeDate := convertGermanDate(extractString(text, `Schlusstag:\s*(\d{2}\.\d{2}\.\d{4})`))
+	if tradeDate == "" {
 		return nil, fmt.Errorf("trade date (Schlusstag) not found in document")
 	}
 
@@ -204,35 +216,38 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	withholdingTax, _ := extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`)
-	gainLoss, _ := extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`)
-	finalAmount, _ := extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`)
+	withholdingTax := floatPtr(extractFloat(text, `Einbeh\. Steuer:\s*(-?[\d.,]+)\s*EUR`))
+	gainLoss := floatPtr(extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`))
+	finalAmount := floatPtr(extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`))
 
-	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
-	if err != nil {
-		exchangeRate = 1.0
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs:\s*([\d.,]+)`))
 
 	return &schema.Transaction{
 		OrderNumber:       extractString(text, `Nr\.([\d/]+)`),
 		TransactionNumber: extractString(text, `Transaktion-Nr\.:\s*(\d+)`),
 		DocumentType:      "CRYPTO",
 		SecurityName:      name,
-		Date:              date,
-		Type:              tradeType,
-		Quantity:          quantity,
-		Price:             price,
-		PriceCurrency:     "EUR",
-		GrossValue:        grossValue,
-		Costs:             extractCosts(text),
-		WithholdingTax:    withholdingTax,
-		GainLoss:          gainLoss,
-		ExchangeRate:      exchangeRate,
-		FinalAmount:       finalAmount,
-		FinalCurrency:     "EUR",
-		CustodyType:       extractString(text, `Verwahrart:\s*([^\n*]+)`),
-		Depositary:        extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
-		ValueDate:         convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
+		TradeDate:         tradeDate,
+		// Crypto has no Ausführungszeit line; the time rides on Schlusstag
+		// ("Schlusstag: 29.01.2026, 16:00 Uhr").
+		ExecutionTime:  extractString(text, `Schlusstag:\s*\d{2}\.\d{2}\.\d{4},\s*(\d{2}:\d{2})`),
+		Type:           tradeType,
+		Quantity:       ptr(quantity),
+		Price:          ptr(price),
+		GrossCurrency:  "EUR",
+		GrossAmount:    ptr(grossValue),
+		Costs:          extractCosts(text),
+		WithholdingTax: withholdingTax,
+		GainLoss:       gainLoss,
+		ExchangeRate:   exchangeRate,
+		NetAmount:      finalAmount,
+		NetCurrency:    "EUR",
+		CustodyType:    extractString(text, `Verwahrart:\s*([^\n*]+)`),
+		Depositary:     extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
+		ValueDate:      convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
 	}, nil
 }
 
@@ -271,10 +286,13 @@ func parseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transac
 			SecurityName: strings.TrimSpace(m[3]),
 			WKN:          m[4],
 			Type:         tradeType,
-			Date:         convertGermanDate(m[6]),
-			Quantity:     mustFloat(m[7]),
-			ValidUntil:   convertGermanDate(m[8]),
-			Limit:        mustFloat(m[9]),
+			// "Kauf vom 28.01.2026" — the Auftr.Datum column. A pending order
+			// has not executed, so it has an order date and no trade date;
+			// this used to be reported as the transaction's date.
+			OrderDate:  convertGermanDate(m[6]),
+			Quantity:   ptr(mustFloat(m[7])),
+			ValidUntil: convertGermanDate(m[8]),
+			Limit:      ptr(mustFloat(m[9])),
 		})
 	}
 	return txs, nil
@@ -332,13 +350,14 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*(-?[\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
+	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
-	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*-?[\d\s.,]+\s*([A-Z]{3})`)
 	if withholdingTaxCurrency == "" {
 		withholdingTaxCurrency = "EUR"
 	}
@@ -355,11 +374,10 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		netCurrency = "EUR"
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`)
-	if err != nil {
-		exchangeRate = 1.0
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -371,15 +389,14 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		DocumentType:           "DIVIDEND",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
-		Quantity:               quantity,
-		DistributionPerShare:   distributionPerShare,
+		Quantity:               ptr(quantity),
+		DistributionPerShare:   ptr(distributionPerShare),
 		DistributionCurrency:   distributionCurrency,
-		GrossAmount:            grossAmount,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		NetAmount:              netAmount,
+		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
 		ExchangeRate:           exchangeRate,
 		ExDate:                 exDate,
@@ -419,13 +436,14 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*(-?[\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
+	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
-	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
+	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*-?[\d\s.,]+\s*([A-Z]{3})`)
 	if withholdingTaxCurrency == "" {
 		withholdingTaxCurrency = "EUR"
 	}
@@ -465,14 +483,14 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		DocumentType:           "INTEREST",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
-		GrossAmount:            grossAmount,
+		ValueDate:              valueDate,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		NetAmount:              netAmount,
+		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
-		InterestRate:           interestRate,
+		InterestRate:           ptr(interestRate),
 		PeriodFrom:             periodFrom,
 		PeriodTo:               periodTo,
 	}
@@ -536,12 +554,9 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		grossCurrency = "EUR"
 	}
 
-	// Extract withholding tax (Einbeh. Steuer)
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`)
-	if err != nil {
-		// Default to 0 if not found
-		withholdingTax = 0
-	}
+	// Extract withholding tax (Einbeh. Steuer). Absent stays nil rather than
+	// collapsing to 0, so "no tax line" is distinguishable from "0,00 EUR".
+	withholdingTax := floatPtr(extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`))
 
 	// Extract withholding tax currency
 	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[-\d\s.,]+\s*([A-Z]{3})`)
@@ -549,11 +564,10 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		withholdingTaxCurrency = "EUR"
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
-	if err != nil {
-		exchangeRate = 1.0
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -565,11 +579,10 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		DocumentType:           "ACCUMULATING",
 		ISIN:                   isin,
 		WKN:                    wkn,
-		Date:                   valueDate,
-		Quantity:               quantity,
-		ReinvestmentPerShare:   reinvestmentPerShare,
+		Quantity:               ptr(quantity),
+		ReinvestmentPerShare:   ptr(reinvestmentPerShare),
 		ReinvestmentCurrency:   reinvestmentCurrency,
-		GrossAmount:            grossAmount,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
@@ -612,46 +625,42 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 
 		quantity := mustFloat(m[4])
 		price := mustFloat(m[5])
-		// The Betrag column is the cash that moved, not the value of the
-		// shares: a row settles (Betrag - charge) / Kurs shares and the
-		// Sammelabrechnung never prints the charge. Recovering it here keeps
-		// GrossValue meaning the same thing it means on a trade confirmation
-		// (Kurswert, shares only) instead of silently folding a fee into the
-		// purchase price.
 		settled := mustFloat(m[6])
-		shareValue := roundCents(quantity * price)
-		charge, err := unitemisedCharge(tradeType, settled, shareValue)
-		if err != nil {
+
+		// A row prints Stücke, Ausf.-Kurs and Betrag and nothing else — no
+		// Kurswert line, no fee line. Those three are therefore all this row
+		// yields. The gap between the cash that moved and the value of the
+		// shares is the fee the document withholds, and it is checked for
+		// plausibility here, but it is not reported: a recovered figure is not
+		// an extracted one, and rebuilding it from a six-decimal quantity
+		// gives it digits it has not earned.
+		if err := checkSavingsPlanRow(tradeType, settled, schema.Mul(quantity, price)); err != nil {
 			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
 		}
 
-		// Buys move cash out, sales move it in, matching FinalAmount's sign
+		// Buys move cash out, sales move it in, matching NetAmount's sign
 		// convention on trade confirmations.
-		finalAmount := -settled
+		finalAmount := schema.Num(-settled.Float(), settled.Scale())
 		if tradeType == "SELL" {
 			finalAmount = settled
 		}
 
 		txns = append(txns, &schema.Transaction{
-			DocumentType:  "SAVINGSPLAN",
-			ISIN:          isin,
-			WKN:           wkn,
-			OrderNumber:   orderNumber,
-			SecurityName:  securityName,
-			Date:          convertGermanDate(m[2]), // Buchtag — the trade date of the row
-			ValueDate:     convertGermanDate(m[3]), // Valuta — settlement
-			Type:          tradeType,
-			Quantity:      quantity,
-			Price:         price,
-			PriceCurrency: "EUR",
-			GrossValue:    shareValue,
-			Costs:         &schema.Costs{Unitemised: charge, Total: charge},
-			FinalAmount:   finalAmount,
-			FinalCurrency: "EUR",
-			// Savings-plan rows are settled in EUR and carry no Devisenkurs
-			// line; without an explicit 1.0 the PP export writes an exchange
-			// rate of 0.
-			ExchangeRate: 1.0,
+			DocumentType: "SAVINGSPLAN",
+			ISIN:         isin,
+			WKN:          wkn,
+			OrderNumber:  orderNumber,
+			SecurityName: securityName,
+			BookingDate:  convertGermanDate(m[2]), // Buchtag — when the row was booked
+			ValueDate:    convertGermanDate(m[3]), // Valuta — settlement
+			Type:         tradeType,
+			Quantity:     ptr(quantity),
+			Price:        ptr(price),
+			NetAmount:    ptr(finalAmount), // Betrag — the cash the row moved
+			NetCurrency:  "EUR",
+			// No GrossAmount, no Costs and no ExchangeRate: the row prints no
+			// Kurswert, no charge line and no Devisenkurs, so there is nothing
+			// to report for any of them.
 		})
 	}
 
@@ -672,9 +681,30 @@ func dateField(text, label string) string {
 	return convertGermanDate(extractString(text, label+hSpace+`:?`+hSpace+`(\d{2}\.\d{2}\.\d{4})`))
 }
 
+// timeField reads a "<label> [:] HH:MM Uhr" header field. The separating
+// whitespace is optional because gxpdf runs the label into its value column on
+// some layouts ("Ausführungszeit09:15 Uhr").
+func timeField(text, label string) string {
+	return extractString(text, label+hSpace+`:?`+hSpace+`(\d{2}:\d{2})`+hSpace+`Uhr`)
+}
+
 // eurField reads a "<label> [:] <amount> EUR" money line.
-func eurField(text, label string) (float64, error) {
+func eurField(text, label string) (schema.Decimal, error) {
 	return extractFloat(text, label+hSpace+`:?`+hSpace+`(-?[\d.,]+)`+hSpace+`EUR`)
+}
+
+// ptr boxes an amount the parser has already established is present, for the
+// fields whose extraction fails the whole parse when the label is missing.
+func ptr(v schema.Decimal) *schema.Decimal { return &v }
+
+// floatPtr adapts an (value, error) extraction pair to the nil-means-absent
+// convention: nil when the label was not found, otherwise a pointer to the
+// value — including a genuine 0,00.
+func floatPtr(v schema.Decimal, err error) *schema.Decimal {
+	if err != nil {
+		return nil
+	}
+	return &v
 }
 
 // firstNonEmpty returns the first non-empty argument, or "".
@@ -696,21 +726,24 @@ func extractCosts(text string) *schema.Costs {
 	if err != nil {
 		return nil
 	}
-	own, _ := eurField(text, `Eigene[^\S\n]*Spesen`)
-	foreign, _ := eurField(text, `Fremde[^\S\n]*Spesen`)
+	own := feeLine(text, `Eigene[^\S\n]*Spesen`)
+	foreign := feeLine(text, `Fremde[^\S\n]*Spesen`)
 
+	// Total is the one figure here the document does not print. Summed
+	// exactly, so it is the true total rather than a float sum snapped back
+	// to the cent to hide its own error.
 	c := &schema.Costs{
 		Provision:       provision,
 		OwnExpenses:     own,
 		ForeignExpenses: foreign,
-		Total:           provision + own + foreign,
+		Total:           schema.Sum(provision, own, foreign),
 	}
 
 	// The itemised lines are only meaningful under their "Enthalten sind
 	// folgende Gebühren" heading, which marks them as the breakdown of
 	// Fremde Spesen rather than additional charges.
 	if strings.Contains(text, "Enthalten sind folgende Gebühren") {
-		c.Fees = &schema.Fees{
+		c.ForeignExpensesBreakdown = &schema.FeeBreakdown{
 			Courtage:                feeLine(text, `Courtage`),
 			TradingFee:              feeLine(text, `Tradinggebühr`),
 			Settlement:              feeLine(text, `Regulierung`),
@@ -723,32 +756,42 @@ func extractCosts(text string) *schema.Costs {
 	return c
 }
 
-func feeLine(text, label string) float64 {
-	f, _ := eurField(text, label)
+// feeLine reads one line of the Gebühren itemisation. A line the block omits
+// is a charge of nothing, reported as the 0.00 every other currency figure
+// here carries rather than a bare 0 — the zero Decimal has no scale.
+func feeLine(text, label string) schema.Decimal {
+	f, err := eurField(text, label)
+	if err != nil {
+		return schema.Computed(0)
+	}
 	return f
 }
 
-// extractFloat extracts a float from text using a regex pattern.
-// Handles European decimal format (comma as decimal separator).
-func extractFloat(text, pattern string) (float64, error) {
+// extractFloat extracts a number from text using a regex pattern, keeping the
+// number of decimal places the document printed it with. Handles European
+// decimal format (comma as decimal separator).
+func extractFloat(text, pattern string) (schema.Decimal, error) {
 	regex := regexp.MustCompile(pattern)
 	matches := regex.FindStringSubmatch(text)
 	if len(matches) < 2 {
-		return 0, fmt.Errorf("pattern not found: %s", pattern)
+		return schema.Decimal{}, fmt.Errorf("pattern not found: %s", pattern)
 	}
 
-	f, err := strconv.ParseFloat(normalizeDecimal(matches[1]), 64)
+	normalized := normalizeDecimal(matches[1])
+	f, err := strconv.ParseFloat(normalized, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse float from '%s': %w", matches[1], err)
+		return schema.Decimal{}, fmt.Errorf("failed to parse float from '%s': %w", matches[1], err)
 	}
 
-	return f, nil
+	return schema.Num(f, schema.ScaleOf(normalized)), nil
 }
 
 // mustFloat parses a German/English-formatted number, returning 0 on failure.
-func mustFloat(s string) float64 {
-	f, _ := strconv.ParseFloat(normalizeDecimal(s), 64)
-	return f
+// It too keeps the printed precision.
+func mustFloat(s string) schema.Decimal {
+	normalized := normalizeDecimal(s)
+	f, _ := strconv.ParseFloat(normalized, 64)
+	return schema.Num(f, schema.ScaleOf(normalized))
 }
 
 // convertGermanDate converts "DD.MM.YYYY" to "YYYY-MM-DD" (empty if not 3 parts).

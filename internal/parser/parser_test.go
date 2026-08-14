@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
+	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
 // TestParseRoutesDocumentTypes covers the Parse dispatch table, which the
@@ -155,23 +156,23 @@ func TestParseTradeBuy(t *testing.T) {
 	if tx.WKN != "A3DP9J" {
 		t.Errorf("expected WKN=A3DP9J, got %s", tx.WKN)
 	}
-	if tx.Quantity != 1.058537 {
-		t.Errorf("expected Quantity=1.058537, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 1.058537 {
+		t.Errorf("expected Quantity=1.058537, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.Price != 47.235 {
-		t.Errorf("expected Price=47.235, got %f", tx.Price)
+	if schema.Amount(tx.Price) != 47.235 {
+		t.Errorf("expected Price=47.235, got %f", schema.Amount(tx.Price))
 	}
-	if tx.PriceCurrency != "EUR" {
-		t.Errorf("expected PriceCurrency=EUR, got %s", tx.PriceCurrency)
+	if tx.GrossCurrency != "EUR" {
+		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
 	}
-	if tx.GrossValue != 50.00 {
-		t.Errorf("expected GrossValue=50.00, got %f", tx.GrossValue)
+	if schema.Amount(tx.GrossAmount) != 50.00 {
+		t.Errorf("expected GrossAmount=50.00, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.Costs == nil {
 		t.Fatal("expected a cost block, got nil")
 	}
-	if tx.Costs.Provision != 0.00 {
-		t.Errorf("expected Provision=0.00, got %f", tx.Costs.Provision)
+	if tx.Costs.Provision.Float() != 0.00 {
+		t.Errorf("expected Provision=0.00, got %f", tx.Costs.Provision.Float())
 	}
 }
 
@@ -239,13 +240,13 @@ func TestParseCrypto(t *testing.T) {
 		{"SecurityName", tx.SecurityName, "BITCOIN"},
 		{"OrderNumber", tx.OrderNumber, "999000111/1"},
 		{"TransactionNumber", tx.TransactionNumber, "4400000044"},
-		{"Quantity", tx.Quantity, 0.014},
-		{"Price", tx.Price, 72462.22},
-		{"GrossValue", tx.GrossValue, 1014.47},
-		{"Provision", tx.Costs.Provision, 5.07},
+		{"Quantity", schema.Amount(tx.Quantity), 0.014},
+		{"Price", schema.Amount(tx.Price), 72462.22},
+		{"GrossAmount", schema.Amount(tx.GrossAmount), 1014.47},
+		{"Provision", tx.Costs.Provision.Float(), 5.07},
 		{"TotalCosts", tx.TotalCosts(), 5.07},
-		{"FinalAmount", tx.FinalAmount, -1019.54},
-		{"Date", tx.Date, "2026-01-29"},
+		{"NetAmount", schema.Amount(tx.NetAmount), -1019.54},
+		{"Date", tx.TradeDate, "2026-01-29"},
 		{"ValueDate", tx.ValueDate, "2026-01-30"},
 		{"CustodyType", tx.CustodyType, "Kryptoverwahrung"},
 		{"Depositary", tx.Depositary, "Tangany GmbH"},
@@ -288,16 +289,60 @@ func TestParseOrderConfirmation(t *testing.T) {
 	a := txs[0]
 	if a.OrderNumber != "330000111" || a.ISIN != "XFC000A2YY6Q" || a.SecurityName != "BITCOIN Tradias" ||
 		a.WKN != "992668" || a.Type != "BUY" ||
-		a.Date != "2026-01-28" || a.Quantity != 0.014 || a.ValidUntil != "2026-02-28" ||
-		a.Limit != 72500.0 || a.DocumentType != "ORDER" {
+		a.OrderDate != "2026-01-28" || schema.Amount(a.Quantity) != 0.014 || a.ValidUntil != "2026-02-28" ||
+		schema.Amount(a.Limit) != 72500.0 || a.DocumentType != "ORDER" {
 		t.Errorf("order[0] mismatch: %+v", a)
 	}
 
 	b := txs[1]
 	if b.OrderNumber != "330000222" || b.ISIN != "IE0003Z9E2Y3" || b.SecurityName != "GLOBAL X COPPER MINERS ETXETRA" ||
 		b.WKN != "A3C7FZ" || b.Type != "BUY" ||
-		b.Quantity != 35.0 || b.ValidUntil != "2026-02-27" || b.Limit != 59.5 {
+		schema.Amount(b.Quantity) != 35.0 || b.ValidUntil != "2026-02-27" || schema.Amount(b.Limit) != 59.5 {
 		t.Errorf("order[1] mismatch: %+v", b)
+	}
+}
+
+// TestParseRefundedWithholdingTax covers a negative "Einbeh. KESt"/"Einbeh.
+// Steuer". Austrian KESt is levied on the Gewinn/Verlust, so a realised loss
+// refunds tax already withheld earlier in the year out of the
+// Verluststeuertopf and the document states the amount with a minus sign.
+// Every document type has to accept it: the extraction patterns once required
+// a leading digit, which made the whole statement fail to parse rather than
+// yield a negative figure.
+func TestParseRefundedWithholdingTax(t *testing.T) {
+	cases := []struct {
+		docType string
+		text    string
+		want    float64
+	}{
+		{
+			"TRADE",
+			"Kauf VANECK SPACE INNOVATORS E (IE000YU9K6K2/A3DP9J)\nAusgeführt : 1,058537 St. Kurswert : 50,00 EUR\nKurs : 47,235000 EUR Provision : 0,00 EUR\nDevisenkurs : 1,000000\nGewinn/Verlust: -120,00 EUR **Einbeh. KESt : -33,00 EUR\nAusführungsdatum : 15.06.2026",
+			-33.00,
+		},
+		{
+			"DIVIDEND",
+			"Nr.4684511050 VANGUARD FTSE ALL-WLD UCI (IE00B3RBWM25/A1JX52)\nSt. : 78,70 Bruttoausschüttung\npro Stück : 0,5459180 USD\nExtag : 18.12.2025 Bruttoausschüttung : 42,96 USD\nValuta : 01.01.2026\n*Einbeh. Steuer : -5,39 EUR\nDevisenkurs : 1,175000\nEndbetrag : 31,17 EUR",
+			-5.39,
+		},
+		{
+			"INTEREST",
+			"ISIN: IE00B3RBWM25\nBruttobetrag : 25,50 EUR\nEinbeh. KESt : -3,40 EUR\nEndbetrag : 28,90 EUR\nZinssatz : 2,5%\nZinsperiode : 01.01.2026 bis 31.03.2026\nValuta : 15.04.2026",
+			-3.40,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.docType, func(t *testing.T) {
+			doc := &extractor.ExtractedDocument{Filename: "x.pdf", Text: tc.text, DocumentType: tc.docType}
+			txs, err := Parse(doc)
+			if err != nil {
+				t.Fatalf("a refunded tax must parse, got: %v", err)
+			}
+			if got := schema.Amount(txs[0].WithholdingTax); got != tc.want {
+				t.Errorf("withholding tax = %.2f, want %.2f", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -325,35 +370,35 @@ func TestParseDividend(t *testing.T) {
 	if tx.WKN != "A1JX52" {
 		t.Errorf("expected WKN=A1JX52, got %s", tx.WKN)
 	}
-	if tx.Quantity != 78.70 {
-		t.Errorf("expected Quantity=78.70, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 78.70 {
+		t.Errorf("expected Quantity=78.70, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.DistributionPerShare != 0.5459180 {
-		t.Errorf("expected DistributionPerShare=0.5459180, got %f", tx.DistributionPerShare)
+	if schema.Amount(tx.DistributionPerShare) != 0.5459180 {
+		t.Errorf("expected DistributionPerShare=0.5459180, got %f", schema.Amount(tx.DistributionPerShare))
 	}
 	if tx.DistributionCurrency != "USD" {
 		t.Errorf("expected DistributionCurrency=USD, got %s", tx.DistributionCurrency)
 	}
-	if tx.GrossAmount != 42.96 {
-		t.Errorf("expected GrossAmount=42.96, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != 42.96 {
+		t.Errorf("expected GrossAmount=42.96, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 5.39 {
-		t.Errorf("expected WithholdingTax=5.39, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 5.39 {
+		t.Errorf("expected WithholdingTax=5.39, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
 	}
-	if tx.NetAmount != 31.17 {
-		t.Errorf("expected NetAmount=31.17, got %f", tx.NetAmount)
+	if schema.Amount(tx.NetAmount) != 31.17 {
+		t.Errorf("expected NetAmount=31.17, got %f", schema.Amount(tx.NetAmount))
 	}
 	if tx.NetCurrency != "EUR" {
 		t.Errorf("expected NetCurrency=EUR, got %s", tx.NetCurrency)
 	}
-	if tx.ExchangeRate != 1.175 {
-		t.Errorf("expected ExchangeRate=1.175, got %f", tx.ExchangeRate)
+	if schema.Amount(tx.ExchangeRate) != 1.175 {
+		t.Errorf("expected ExchangeRate=1.175, got %f", schema.Amount(tx.ExchangeRate))
 	}
 	if tx.ExDate != "2025-12-18" {
 		t.Errorf("expected ExDate=2025-12-18, got %s", tx.ExDate)
@@ -384,26 +429,26 @@ func TestParseInterest(t *testing.T) {
 	if tx.ISIN != "IE00B3RBWM25" {
 		t.Errorf("expected ISIN=IE00B3RBWM25, got %s", tx.ISIN)
 	}
-	if tx.GrossAmount != 25.50 {
-		t.Errorf("expected GrossAmount=25.50, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != 25.50 {
+		t.Errorf("expected GrossAmount=25.50, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "EUR" {
 		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 3.40 {
-		t.Errorf("expected WithholdingTax=3.40, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 3.40 {
+		t.Errorf("expected WithholdingTax=3.40, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
 	}
-	if tx.NetAmount != 22.10 {
-		t.Errorf("expected NetAmount=22.10, got %f", tx.NetAmount)
+	if schema.Amount(tx.NetAmount) != 22.10 {
+		t.Errorf("expected NetAmount=22.10, got %f", schema.Amount(tx.NetAmount))
 	}
 	if tx.NetCurrency != "EUR" {
 		t.Errorf("expected NetCurrency=EUR, got %s", tx.NetCurrency)
 	}
-	if tx.InterestRate != 2.5 {
-		t.Errorf("expected InterestRate=2.5, got %f", tx.InterestRate)
+	if schema.Amount(tx.InterestRate) != 2.5 {
+		t.Errorf("expected InterestRate=2.5, got %f", schema.Amount(tx.InterestRate))
 	}
 	if tx.PeriodFrom != "2026-01-01" {
 		t.Errorf("expected PeriodFrom=2026-01-01, got %s", tx.PeriodFrom)
@@ -411,8 +456,8 @@ func TestParseInterest(t *testing.T) {
 	if tx.PeriodTo != "2026-03-31" {
 		t.Errorf("expected PeriodTo=2026-03-31, got %s", tx.PeriodTo)
 	}
-	if tx.Date != "2026-04-15" {
-		t.Errorf("expected Date=2026-04-15, got %s", tx.Date)
+	if tx.ValueDate != "2026-04-15" {
+		t.Errorf("expected ValueDate=2026-04-15, got %s", tx.ValueDate)
 	}
 }
 
@@ -440,29 +485,29 @@ func TestParseAccumulating(t *testing.T) {
 	if tx.WKN != "A2H514" {
 		t.Errorf("expected WKN=A2H514, got %s", tx.WKN)
 	}
-	if tx.Quantity != 4.75 {
-		t.Errorf("expected Quantity=4.75, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 4.75 {
+		t.Errorf("expected Quantity=4.75, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.ReinvestmentPerShare != -0.572 {
-		t.Errorf("expected ReinvestmentPerShare=-0.572, got %f", tx.ReinvestmentPerShare)
+	if schema.Amount(tx.ReinvestmentPerShare) != -0.572 {
+		t.Errorf("expected ReinvestmentPerShare=-0.572, got %f", schema.Amount(tx.ReinvestmentPerShare))
 	}
 	if tx.ReinvestmentCurrency != "USD" {
 		t.Errorf("expected ReinvestmentCurrency=USD, got %s", tx.ReinvestmentCurrency)
 	}
-	if tx.GrossAmount != -2.72 {
-		t.Errorf("expected GrossAmount=-2.72, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != -2.72 {
+		t.Errorf("expected GrossAmount=-2.72, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 0.0 {
-		t.Errorf("expected WithholdingTax=0.0, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 0.0 {
+		t.Errorf("expected WithholdingTax=0.0, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
 	}
-	if tx.ExchangeRate != 1.08 {
-		t.Errorf("expected ExchangeRate=1.08, got %f", tx.ExchangeRate)
+	if schema.Amount(tx.ExchangeRate) != 1.08 {
+		t.Errorf("expected ExchangeRate=1.08, got %f", schema.Amount(tx.ExchangeRate))
 	}
 	if tx.ExDate != "2026-06-15" {
 		t.Errorf("expected ExDate=2026-06-15, got %s", tx.ExDate)
@@ -474,23 +519,29 @@ func TestParseAccumulating(t *testing.T) {
 
 func TestExtractFloatGermanNumbers(t *testing.T) {
 	cases := []struct {
-		name  string
-		input string
-		want  float64
+		name string
+		// wantText is the value as it must be rendered back out: the digits
+		// the input printed, not Go's shortest round-trip form. "50" must not
+		// become "50.00", and "110,000000" must not collapse to "110".
+		input, wantText string
+		want            float64
 	}{
 		// German format: '.' thousands, ',' decimal
-		{"de plain decimal", "Betrag : 72,95 EUR", 72.95},
-		{"de thousands separator", "Betrag : 2.034,20 EUR", 2034.20},
-		{"de thousands with trailing space", "Betrag : 2.034,20  EUR", 2034.20},
-		{"de millions", "Betrag : 1.234.567,89 EUR", 1234567.89},
-		{"de negative thousands", "Betrag : -1.500,00 EUR", -1500.00},
+		{"de plain decimal", "Betrag : 72,95 EUR", "72.95", 72.95},
+		{"de thousands separator", "Betrag : 2.034,20 EUR", "2034.20", 2034.20},
+		{"de thousands with trailing space", "Betrag : 2.034,20  EUR", "2034.20", 2034.20},
+		{"de millions", "Betrag : 1.234.567,89 EUR", "1234567.89", 1234567.89},
+		{"de negative thousands", "Betrag : -1.500,00 EUR", "-1500.00", -1500.00},
 		// English format: ',' thousands, '.' decimal
-		{"en plain decimal", "Betrag : 72.95 EUR", 72.95},
-		{"en thousands separator", "Betrag : 2,034.20 EUR", 2034.20},
-		{"en millions", "Betrag : 1,234,567.89 EUR", 1234567.89},
-		{"en negative thousands", "Betrag : -1,500.00 EUR", -1500.00},
+		{"en plain decimal", "Betrag : 72.95 EUR", "72.95", 72.95},
+		{"en thousands separator", "Betrag : 2,034.20 EUR", "2034.20", 2034.20},
+		{"en millions", "Betrag : 1,234,567.89 EUR", "1234567.89", 1234567.89},
+		{"en negative thousands", "Betrag : -1,500.00 EUR", "-1500.00", -1500.00},
 		// no separators
-		{"integer no decimals", "Betrag : 50 EUR", 50},
+		{"integer no decimals", "Betrag : 50 EUR", "50", 50},
+		// the precision a Kurs line states, which shortest-form marshalling
+		// used to throw away
+		{"six decimal places", "Betrag : 110,000000 EUR", "110.000000", 110},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -498,8 +549,11 @@ func TestExtractFloatGermanNumbers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("extractFloat(%q) returned error: %v", tc.input, err)
 			}
-			if got != tc.want {
-				t.Errorf("extractFloat(%q) = %v, want %v", tc.input, got, tc.want)
+			if got.Float() != tc.want {
+				t.Errorf("extractFloat(%q) = %v, want %v", tc.input, got.Float(), tc.want)
+			}
+			if got.String() != tc.wantText {
+				t.Errorf("extractFloat(%q) renders as %q, want %q", tc.input, got.String(), tc.wantText)
 			}
 		})
 	}
@@ -542,55 +596,60 @@ func TestParseSavingsPlan(t *testing.T) {
 	if a.Type != "BUY" {
 		t.Errorf("Type = %q, want BUY", a.Type)
 	}
-	if a.Date != "2025-01-15" {
-		t.Errorf("Date = %q, want 2025-01-15", a.Date)
+	if a.BookingDate != "2025-01-15" {
+		t.Errorf("Date = %q, want 2025-01-15", a.BookingDate)
 	}
-	if a.Quantity != 1.478695 {
-		t.Errorf("Quantity = %f, want 1.478695", a.Quantity)
+	if schema.Amount(a.Quantity) != 1.478695 {
+		t.Errorf("Quantity = %f, want 1.478695", schema.Amount(a.Quantity))
 	}
-	if a.Price != 134.24 {
-		t.Errorf("Price = %f, want 134.24", a.Price)
+	if schema.Amount(a.Price) != 134.24 {
+		t.Errorf("Price = %f, want 134.24", schema.Amount(a.Price))
 	}
-	if a.PriceCurrency != "EUR" {
-		t.Errorf("PriceCurrency = %q, want EUR", a.PriceCurrency)
+	// Buys move cash out, matching NetAmount on a trade confirmation. Betrag
+	// is the one amount the row prints besides Stücke and Kurs.
+	if got := a.NetAmount.String(); got != "-200.00" {
+		t.Errorf("NetAmount = %s, want -200.00", got)
 	}
-	// GrossValue is the value of the shares (Stücke x Kurs), not the Betrag
-	// column: the 200.00 settled buys 198.50 worth of shares, and the 1.50
-	// difference is a charge the Sammelabrechnung never prints as a line item.
-	if a.GrossValue != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", a.GrossValue)
+
+	// A row prints Stücke, Ausf.-Kurs and Betrag, so those three are all it
+	// yields. There is no Kurswert line, no charge line and no Devisenkurs, and
+	// this extractor reports none of them.
+	//
+	// GrossAmount and a costs block used to be reconstructed here: the shares
+	// were valued at 198.5000168 and the leftover 1.4999832 reported as a fee.
+	// Both were figures no line of the document carries, and their trailing
+	// places came from the quantity being printed to six decimals rather than
+	// from anything the statement knows. The gap is still checked (see
+	// TestSavingsPlanChargeBound); it is just not output.
+	if a.GrossAmount != nil {
+		t.Errorf("GrossAmount = %s, want none: the row prints no Kurswert", a.GrossAmount)
 	}
-	if a.Costs == nil {
-		t.Fatal("Costs = nil, want the derived charge")
+	if a.GrossCurrency != "" {
+		t.Errorf("GrossCurrency = %q, want empty: there is no gross amount to qualify", a.GrossCurrency)
 	}
-	if a.Costs.Unitemised != 1.50 {
-		t.Errorf("Costs.Unitemised = %f, want 1.50", a.Costs.Unitemised)
+	if a.Costs != nil {
+		t.Errorf("Costs = %+v, want none: the row prints no charge line", a.Costs)
 	}
-	if a.Costs.Total != 1.50 {
-		t.Errorf("Costs.Total = %f, want 1.50", a.Costs.Total)
-	}
-	// Buys move cash out, matching FinalAmount on a trade confirmation.
-	if a.FinalAmount != -200.00 {
-		t.Errorf("FinalAmount = %f, want -200.00", a.FinalAmount)
+	if a.ExchangeRate != nil {
+		t.Errorf("ExchangeRate = %s, want none: the row prints no Devisenkurs", a.ExchangeRate)
 	}
 
 	b := txs[1]
 	if b.Type != "SELL" {
 		t.Errorf("Type = %q, want SELL", b.Type)
 	}
-	if b.Date != "2025-02-17" {
-		t.Errorf("Date = %q, want 2025-02-17", b.Date)
+	if b.BookingDate != "2025-02-17" {
+		t.Errorf("Date = %q, want 2025-02-17", b.BookingDate)
 	}
-	// 1,436948 x 138,14 is 198.50, exactly what this row settled, so there is
-	// no gap and no charge to recover.
-	if b.GrossValue != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", b.GrossValue)
+	if got := b.NetAmount.String(); got != "198.50" {
+		t.Errorf("NetAmount = %s, want 198.50", got)
 	}
-	if b.Costs.Unitemised != 0 {
-		t.Errorf("Costs.Unitemised = %f, want 0", b.Costs.Unitemised)
-	}
-	if b.FinalAmount != 198.50 {
-		t.Errorf("FinalAmount = %f, want 198.50", b.FinalAmount)
+	// 1,436948 x 138,1400 is 198.49999672 against a settled 198.50: the gap is
+	// -0.00000328, negative only because the share value is rebuilt from a
+	// six-decimal quantity. checkSavingsPlanRow tolerates that rather than
+	// reading it as a negative fee, so the row parses.
+	if b.Costs != nil {
+		t.Errorf("Costs = %+v, want none", b.Costs)
 	}
 }
 
@@ -803,54 +862,92 @@ func TestAllFixturesParse(t *testing.T) {
 		transactionNumber string
 		depotNumber       string
 		depotHolder       string
-		date              string // txs[0].Date — the trade/value date, not the letter date
+		tradeDate         string // Handelstag/Schlusstag, not the letter date
+		bookingDate       string // Buchtag, savings plans only
 		orderDate         string
 		valueDate         string
+		executionTime     string
 		depositCountry    string
 		tradeType         string
+		securityName      string
+		gainLoss          *schema.Decimal
+		withholdingTax    *schema.Decimal
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
 			orderNumber: "700000011/1", transactionNumber: "7000000011",
 			depotNumber: "11000000011", depotHolder: "Mustermann, Max",
 			// Letter date is 16.09.2025; Handelstag is 15.09.2025.
-			date: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
-			depositCountry: "GB",
+			tradeDate: "2025-09-15", orderDate: "2025-09-15", valueDate: "2025-09-17",
+			depositCountry: "GB", securityName: "L&G GOLD MINING ETF",
 		},
 		{
 			file: "trade_sample_2.pdf", docType: "TRADE", wantTransactions: 1,
 			orderNumber: "800000022/1", transactionNumber: "7000000022",
 			depotNumber: "22000000021", depotHolder: "Beispiel, Erika",
 			// Auftragsdatum 28.01. and Valuta 03.02. straddle Handelstag 30.01.
-			date: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
+			tradeDate: "2026-01-30", orderDate: "2026-01-28", valueDate: "2026-02-03",
 			// Lagerland runs into the next column in gxpdf's output here.
 			depositCountry: "GB",
+			// Older layout prints "Nr. 800000022/1" with a space after the dot.
+			securityName: "GLOBAL X COPPER MINERS ET",
+		},
+		{
+			file: "trade_sample_3.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "880000088/1", transactionNumber: "8800000088",
+			depotNumber: "88000000081", depotHolder: "Steiner, Felix",
+			// Letter date, Auftragsdatum and Handelstag are all 15.01.2025.
+			tradeDate: "2025-01-15", orderDate: "2025-01-15", valueDate: "2025-01-17",
+			// This is the older layout, whose mono body font is StandardEncoding:
+			// gxpdf decodes it as WinAnsi, so "Großbritannien" arrives as
+			// "Groûbritannien" and yields no country unless extractTextFromPDF
+			// repairs it. Asserting GB here is what pins that fix.
+			depositCountry: "GB",
+			tradeType:      "BUY",
+			securityName:   "VANGUARD FTSE ALL-WLD UCI",
+		},
+		{
+			// The only sale in the corpus. It is what pins the SELL side of
+			// checkSettlement (deductions come off the proceeds, not onto
+			// them) and the only fixture with a non-zero Gewinn/Verlust.
+			file: "verkauf_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "990000099/1", transactionNumber: "9900000099",
+			depotNumber: "99000000091", depotHolder: "Wallner, Sophie",
+			tradeDate: "2024-12-18", orderDate: "2024-12-17", valueDate: "2024-12-20",
+			executionTime:  "13:56",
+			depositCountry: "GB", tradeType: "SELL",
+			securityName: "VANGUARD S&P 500 ETF",
+			gainLoss:     amt(403.97), withholdingTax: amt(24.51),
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
 			orderNumber: "660000111/1", transactionNumber: "6600000066",
-			date: "2026-01-29", valueDate: "2026-01-30",
+			tradeDate: "2026-01-29", valueDate: "2026-01-30", executionTime: "16:00",
 		},
 		{
 			file: "orderbestaetigung_sample_1.pdf", docType: "ORDER", wantTransactions: 2,
 			orderNumber: "770000111",
 			depotNumber: "77000000071", depotHolder: "Hofer, Lukas",
-			date: "2026-01-28",
+			// A pending order has an Auftr.Datum and no execution: no trade date.
+			orderDate: "2026-01-28",
 		},
 		{
 			file: "dividend_sample_1.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "33000000031", depotHolder: "Österreicher, Johann",
-			date: "2025-10-01", valueDate: "2025-10-01",
+			// A dividend states only a Valuta — no trade, so no trade date.
+			valueDate: "2025-10-01",
 		},
 		{
 			file: "dividend_sample_2.pdf", docType: "DIVIDEND", wantTransactions: 1,
 			depotNumber: "44000000041", depotHolder: "Gruber, Anna-Maria",
-			date: "2025-10-01", valueDate: "2025-10-01",
+			// A dividend states only a Valuta — no trade, so no trade date.
+			valueDate: "2025-10-01",
 		},
 		{
 			file: "sparplan_sample_1.pdf", docType: "SAVINGSPLAN", wantTransactions: 12,
 			depotNumber: "55000000051", depotHolder: "Dr. Klaus Bergmann",
-			date: "2025-01-15", valueDate: "2025-01-17", tradeType: "BUY",
+			// A Sammelabrechnung row prints Buchtag and Valuta, never a Handelstag.
+			bookingDate: "2025-01-15", valueDate: "2025-01-17", tradeType: "BUY",
 		},
 	}
 
@@ -885,14 +982,33 @@ func TestAllFixturesParse(t *testing.T) {
 					txs[0].TransactionNumber, tc.transactionNumber)
 			}
 			for _, d := range []struct{ name, got, want string }{
-				{"date", txs[0].Date, tc.date},
+				{"trade date", txs[0].TradeDate, tc.tradeDate},
+				{"booking date", txs[0].BookingDate, tc.bookingDate},
 				{"order date", txs[0].OrderDate, tc.orderDate},
 				{"value date", txs[0].ValueDate, tc.valueDate},
+				{"execution time", txs[0].ExecutionTime, tc.executionTime},
 				{"deposit country", txs[0].DepositCountry, tc.depositCountry},
 				{"trade type", txs[0].Type, tc.tradeType},
+				{"security name", txs[0].SecurityName, tc.securityName},
 			} {
 				if d.want != "" && d.got != d.want {
 					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)
+				}
+			}
+			for _, d := range []struct {
+				name      string
+				got, want *schema.Decimal
+			}{
+				{"gain/loss", txs[0].GainLoss, tc.gainLoss},
+				{"withholding tax", txs[0].WithholdingTax, tc.withholdingTax},
+			} {
+				if d.want == nil {
+					continue
+				}
+				if d.got == nil {
+					t.Errorf("%s = nil, want %.2f", d.name, d.want.Float())
+				} else if d.got.Float() != d.want.Float() {
+					t.Errorf("%s = %.2f, want %.2f", d.name, d.got.Float(), d.want.Float())
 				}
 			}
 		})
@@ -926,8 +1042,8 @@ func TestParseTradeUsesHandelstagNotLetterDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseTrade failed: %v", err)
 	}
-	if tx.Date != "2025-09-12" {
-		t.Errorf("Date = %q, want the Handelstag 2025-09-12", tx.Date)
+	if tx.TradeDate != "2025-09-12" {
+		t.Errorf("Date = %q, want the Handelstag 2025-09-12", tx.TradeDate)
 	}
 	if tx.OrderDate != "2025-09-15" {
 		t.Errorf("OrderDate = %q, want the Auftragsdatum 2025-09-15", tx.OrderDate)
@@ -948,14 +1064,23 @@ func TestParseTradeDateFallback(t *testing.T) {
 		want   string // "" means parseTrade must fail
 	}{
 		{
-			"falls back to Auftragsdatum",
-			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "2025-09-15",
-		},
-		{
 			"falls back to Schlusstag",
 			"             Graz, 16.09.2025\nSchlusstag: 11.09.2025, 16:00 Uhr\n", "2025-09-11",
 		},
+		{
+			"falls back to Ausführungsdatum",
+			"             Graz, 16.09.2025\nAusführungsdatum   15.09.2025\n", "2025-09-15",
+		},
 		{"letter date alone is not a trade date", "             Graz, 16.09.2025\n", ""},
+		{
+			// Auftragsdatum used to close the fallback chain, so a document
+			// with no Handelstag reported the day the order was placed as the
+			// day it executed. Those are different facts, order_date already
+			// carries the first, and a trade confirmation that states neither
+			// execution label has no trade date to report.
+			"Auftragsdatum is not a trade date",
+			"             Graz, 16.09.2025\nAuftragsdatum      15.09.2025\n", "",
+		},
 	}
 
 	for _, tc := range cases {
@@ -966,15 +1091,15 @@ func TestParseTradeDateFallback(t *testing.T) {
 			tx, err := parseTrade(doc)
 			if tc.want == "" {
 				if err == nil {
-					t.Fatalf("expected an error, got Date=%q", tx.Date)
+					t.Fatalf("expected an error, got Date=%q", tx.TradeDate)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("parseTrade failed: %v", err)
 			}
-			if tx.Date != tc.want {
-				t.Errorf("Date = %q, want %q", tx.Date, tc.want)
+			if tx.TradeDate != tc.want {
+				t.Errorf("Date = %q, want %q", tx.TradeDate, tc.want)
 			}
 		})
 	}
@@ -1009,7 +1134,7 @@ func TestParseTradeCosts(t *testing.T) {
 	if tx.Costs == nil {
 		t.Fatal("expected a cost block, got nil")
 	}
-	if tx.Costs.Fees == nil {
+	if tx.Costs.ForeignExpensesBreakdown == nil {
 		t.Fatal("expected an itemised Gebühren breakdown, got nil")
 	}
 	checks := []struct {
@@ -1017,15 +1142,15 @@ func TestParseTradeCosts(t *testing.T) {
 		got  float64
 		want float64
 	}{
-		{"Provision", tx.Costs.Provision, 1.50},
-		{"Eigene Spesen", tx.Costs.OwnExpenses, 0.90},
-		{"Fremde Spesen", tx.Costs.ForeignExpenses, 3.00},
-		{"total", tx.Costs.Total, 5.40},
-		{"Tradinggebühr", tx.Costs.Fees.TradingFee, 0.50},
-		{"Regulierung", tx.Costs.Fees.Settlement, 2.50},
-		{"Courtage", tx.Costs.Fees.Courtage, 0.00},
-		{"Einbeh. KESt", tx.WithholdingTax, 0.25},
-		{"Endbetrag", tx.FinalAmount, -2039.85},
+		{"Provision", tx.Costs.Provision.Float(), 1.50},
+		{"Eigene Spesen", tx.Costs.OwnExpenses.Float(), 0.90},
+		{"Fremde Spesen", tx.Costs.ForeignExpenses.Float(), 3.00},
+		{"total", tx.Costs.Total.Float(), 5.40},
+		{"Tradinggebühr", tx.Costs.ForeignExpensesBreakdown.TradingFee.Float(), 0.50},
+		{"Regulierung", tx.Costs.ForeignExpensesBreakdown.Settlement.Float(), 2.50},
+		{"Courtage", tx.Costs.ForeignExpensesBreakdown.Courtage.Float(), 0.00},
+		{"Einbeh. KESt", schema.Amount(tx.WithholdingTax), 0.25},
+		{"Endbetrag", schema.Amount(tx.NetAmount), -2039.85},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -1033,11 +1158,11 @@ func TestParseTradeCosts(t *testing.T) {
 		}
 	}
 	// The breakdown itemises Fremde Spesen; double-counting it would give 8.40.
-	sum := tx.Costs.Fees.Courtage + tx.Costs.Fees.TradingFee + tx.Costs.Fees.Settlement +
-		tx.Costs.Fees.ClosingNotes + tx.Costs.Fees.LSAllocation +
-		tx.Costs.Fees.FinancialTransactionTax + tx.Costs.Fees.Other
-	if sum != tx.Costs.ForeignExpenses {
-		t.Errorf("Gebühren sum to %v, want Fremde Spesen %v", sum, tx.Costs.ForeignExpenses)
+	sum := tx.Costs.ForeignExpensesBreakdown.Courtage.Float() + tx.Costs.ForeignExpensesBreakdown.TradingFee.Float() + tx.Costs.ForeignExpensesBreakdown.Settlement.Float() +
+		tx.Costs.ForeignExpensesBreakdown.ClosingNotes.Float() + tx.Costs.ForeignExpensesBreakdown.LSAllocation.Float() +
+		tx.Costs.ForeignExpensesBreakdown.FinancialTransactionTax.Float() + tx.Costs.ForeignExpensesBreakdown.Other.Float()
+	if sum != tx.Costs.ForeignExpenses.Float() {
+		t.Errorf("Gebühren sum to %v, want Fremde Spesen %v", sum, tx.Costs.ForeignExpenses.Float())
 	}
 }
 
@@ -1052,11 +1177,11 @@ func TestParseCostsAbsentBlockIsNil(t *testing.T) {
 	if c == nil {
 		t.Fatal("expected a cost block for a document with a Provision line")
 	}
-	if c.Total != 0 {
+	if c.Total.Float() != 0 {
 		t.Errorf("total = %v, want 0", c.Total)
 	}
-	if c.Fees != nil {
-		t.Errorf("expected no Gebühren breakdown without its heading, got %+v", c.Fees)
+	if c.ForeignExpensesBreakdown != nil {
+		t.Errorf("expected no Gebühren breakdown without its heading, got %+v", c.ForeignExpensesBreakdown)
 	}
 }
 
