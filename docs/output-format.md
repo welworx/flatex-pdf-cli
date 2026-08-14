@@ -57,7 +57,7 @@ All extracted transactions are returned as JSON objects with the following struc
 - `order_number` — Order number (Auftragsnummer), if present
 - `transaction_number` — Tax-report transaction number (Transaktion-Nr.), if present
 - `document_type` — Type of document (TRADE, DIVIDEND, INTEREST, ACCUMULATING, ORDER, CRYPTO, SAVINGSPLAN)
-- `isin` — ISIN of the security
+- `isin` — ISIN of the security; its check digit is validated, see [ISIN check digit](#isin-check-digit)
 - `wkn` — German securities identification number (if available)
 - `security_name` — Bezeichnung of the security, if the document prints one
 - Dates — see [Dates](#dates). Every date is ISO YYYY-MM-DD.
@@ -138,6 +138,15 @@ because it is not an extract — it is a file shaped for another program:
 - It keeps **shortest-form numbers** rather than the document's precision: PP
   re-parses these columns, and padding to the cent would round a fractional
   share count — `1.478695` shares is not `1.48`.
+
+## ISIN check digit
+
+Every extracted `isin` is checked against its own check digit, per ISO 6166's
+Luhn algorithm. A misread character or a value that landed in the wrong field
+is far more likely to fail this check than to pass it by coincidence, so a
+failure is treated the same as any other cross-check: the parse fails loudly
+rather than emitting a wrong ISIN. flatex's synthetic crypto ISINs (e.g.
+`XFC000A2YY6Q`) are valid Luhn numbers and pass like any other.
 
 ## Withholding tax (Austrian KESt)
 
