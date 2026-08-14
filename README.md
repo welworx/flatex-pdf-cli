@@ -17,7 +17,10 @@ distributions, orders, crypto, savings plans.
 
 Don't have the PDFs yet? [**flatex-fetch**](https://github.com/welworx/flatex-fetch)
 logs into the flatex.at portal and downloads them for you; this tool then
-turns them into structured data.
+turns them into structured data. For a walkthrough of both ends of that chain —
+downloading each month's new documents, then turning them into a CSV or a
+Portfolio Performance import — see
+[**I Built a Banking Automation Tool Without Writing a Line of Go**](https://medium.com/automate-the-rest/i-built-a-banking-automation-tool-without-writing-a-line-of-go-3aa614df035a).
 
 > **Disclaimer:** This is an independent, unofficial open-source project. It is
 > **not** affiliated with, endorsed by, sponsored by, or in any way associated
