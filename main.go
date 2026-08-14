@@ -83,7 +83,8 @@ func main() {
 			}
 			fmt.Fprintf(os.Stderr, "%s %s %s: charge %.2f derived, %.2f settled less %.6f x %.2f in shares (not itemised by the document)\n",
 				t.DocumentType, t.Date, t.ISIN, t.Costs.Unitemised,
-				t.GrossValue+t.Costs.Unitemised, t.Quantity, t.Price)
+				schema.Amount(t.GrossValue)+t.Costs.Unitemised,
+				schema.Amount(t.Quantity), schema.Amount(t.Price))
 		}
 	}
 

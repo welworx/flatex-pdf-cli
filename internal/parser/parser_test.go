@@ -156,17 +156,17 @@ func TestParseTradeBuy(t *testing.T) {
 	if tx.WKN != "A3DP9J" {
 		t.Errorf("expected WKN=A3DP9J, got %s", tx.WKN)
 	}
-	if tx.Quantity != 1.058537 {
-		t.Errorf("expected Quantity=1.058537, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 1.058537 {
+		t.Errorf("expected Quantity=1.058537, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.Price != 47.235 {
-		t.Errorf("expected Price=47.235, got %f", tx.Price)
+	if schema.Amount(tx.Price) != 47.235 {
+		t.Errorf("expected Price=47.235, got %f", schema.Amount(tx.Price))
 	}
 	if tx.PriceCurrency != "EUR" {
 		t.Errorf("expected PriceCurrency=EUR, got %s", tx.PriceCurrency)
 	}
-	if tx.GrossValue != 50.00 {
-		t.Errorf("expected GrossValue=50.00, got %f", tx.GrossValue)
+	if schema.Amount(tx.GrossValue) != 50.00 {
+		t.Errorf("expected GrossValue=50.00, got %f", schema.Amount(tx.GrossValue))
 	}
 	if tx.Costs == nil {
 		t.Fatal("expected a cost block, got nil")
@@ -240,12 +240,12 @@ func TestParseCrypto(t *testing.T) {
 		{"SecurityName", tx.SecurityName, "BITCOIN"},
 		{"OrderNumber", tx.OrderNumber, "999000111/1"},
 		{"TransactionNumber", tx.TransactionNumber, "4400000044"},
-		{"Quantity", tx.Quantity, 0.014},
-		{"Price", tx.Price, 72462.22},
-		{"GrossValue", tx.GrossValue, 1014.47},
+		{"Quantity", schema.Amount(tx.Quantity), 0.014},
+		{"Price", schema.Amount(tx.Price), 72462.22},
+		{"GrossValue", schema.Amount(tx.GrossValue), 1014.47},
 		{"Provision", tx.Costs.Provision, 5.07},
 		{"TotalCosts", tx.TotalCosts(), 5.07},
-		{"FinalAmount", tx.FinalAmount, -1019.54},
+		{"FinalAmount", schema.Amount(tx.FinalAmount), -1019.54},
 		{"Date", tx.Date, "2026-01-29"},
 		{"ValueDate", tx.ValueDate, "2026-01-30"},
 		{"CustodyType", tx.CustodyType, "Kryptoverwahrung"},
@@ -289,15 +289,15 @@ func TestParseOrderConfirmation(t *testing.T) {
 	a := txs[0]
 	if a.OrderNumber != "330000111" || a.ISIN != "XFC000A2YY6Q" || a.SecurityName != "BITCOIN Tradias" ||
 		a.WKN != "992668" || a.Type != "BUY" ||
-		a.Date != "2026-01-28" || a.Quantity != 0.014 || a.ValidUntil != "2026-02-28" ||
-		a.Limit != 72500.0 || a.DocumentType != "ORDER" {
+		a.Date != "2026-01-28" || schema.Amount(a.Quantity) != 0.014 || a.ValidUntil != "2026-02-28" ||
+		schema.Amount(a.Limit) != 72500.0 || a.DocumentType != "ORDER" {
 		t.Errorf("order[0] mismatch: %+v", a)
 	}
 
 	b := txs[1]
 	if b.OrderNumber != "330000222" || b.ISIN != "IE0003Z9E2Y3" || b.SecurityName != "GLOBAL X COPPER MINERS ETXETRA" ||
 		b.WKN != "A3C7FZ" || b.Type != "BUY" ||
-		b.Quantity != 35.0 || b.ValidUntil != "2026-02-27" || b.Limit != 59.5 {
+		schema.Amount(b.Quantity) != 35.0 || b.ValidUntil != "2026-02-27" || schema.Amount(b.Limit) != 59.5 {
 		t.Errorf("order[1] mismatch: %+v", b)
 	}
 }
@@ -326,17 +326,17 @@ func TestParseDividend(t *testing.T) {
 	if tx.WKN != "A1JX52" {
 		t.Errorf("expected WKN=A1JX52, got %s", tx.WKN)
 	}
-	if tx.Quantity != 78.70 {
-		t.Errorf("expected Quantity=78.70, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 78.70 {
+		t.Errorf("expected Quantity=78.70, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.DistributionPerShare != 0.5459180 {
-		t.Errorf("expected DistributionPerShare=0.5459180, got %f", tx.DistributionPerShare)
+	if schema.Amount(tx.DistributionPerShare) != 0.5459180 {
+		t.Errorf("expected DistributionPerShare=0.5459180, got %f", schema.Amount(tx.DistributionPerShare))
 	}
 	if tx.DistributionCurrency != "USD" {
 		t.Errorf("expected DistributionCurrency=USD, got %s", tx.DistributionCurrency)
 	}
-	if tx.GrossAmount != 42.96 {
-		t.Errorf("expected GrossAmount=42.96, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != 42.96 {
+		t.Errorf("expected GrossAmount=42.96, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
@@ -347,8 +347,8 @@ func TestParseDividend(t *testing.T) {
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
 	}
-	if tx.NetAmount != 31.17 {
-		t.Errorf("expected NetAmount=31.17, got %f", tx.NetAmount)
+	if schema.Amount(tx.NetAmount) != 31.17 {
+		t.Errorf("expected NetAmount=31.17, got %f", schema.Amount(tx.NetAmount))
 	}
 	if tx.NetCurrency != "EUR" {
 		t.Errorf("expected NetCurrency=EUR, got %s", tx.NetCurrency)
@@ -385,8 +385,8 @@ func TestParseInterest(t *testing.T) {
 	if tx.ISIN != "IE00B3RBWM25" {
 		t.Errorf("expected ISIN=IE00B3RBWM25, got %s", tx.ISIN)
 	}
-	if tx.GrossAmount != 25.50 {
-		t.Errorf("expected GrossAmount=25.50, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != 25.50 {
+		t.Errorf("expected GrossAmount=25.50, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "EUR" {
 		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
@@ -397,14 +397,14 @@ func TestParseInterest(t *testing.T) {
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
 	}
-	if tx.NetAmount != 22.10 {
-		t.Errorf("expected NetAmount=22.10, got %f", tx.NetAmount)
+	if schema.Amount(tx.NetAmount) != 22.10 {
+		t.Errorf("expected NetAmount=22.10, got %f", schema.Amount(tx.NetAmount))
 	}
 	if tx.NetCurrency != "EUR" {
 		t.Errorf("expected NetCurrency=EUR, got %s", tx.NetCurrency)
 	}
-	if tx.InterestRate != 2.5 {
-		t.Errorf("expected InterestRate=2.5, got %f", tx.InterestRate)
+	if schema.Amount(tx.InterestRate) != 2.5 {
+		t.Errorf("expected InterestRate=2.5, got %f", schema.Amount(tx.InterestRate))
 	}
 	if tx.PeriodFrom != "2026-01-01" {
 		t.Errorf("expected PeriodFrom=2026-01-01, got %s", tx.PeriodFrom)
@@ -441,17 +441,17 @@ func TestParseAccumulating(t *testing.T) {
 	if tx.WKN != "A2H514" {
 		t.Errorf("expected WKN=A2H514, got %s", tx.WKN)
 	}
-	if tx.Quantity != 4.75 {
-		t.Errorf("expected Quantity=4.75, got %f", tx.Quantity)
+	if schema.Amount(tx.Quantity) != 4.75 {
+		t.Errorf("expected Quantity=4.75, got %f", schema.Amount(tx.Quantity))
 	}
-	if tx.ReinvestmentPerShare != -0.572 {
-		t.Errorf("expected ReinvestmentPerShare=-0.572, got %f", tx.ReinvestmentPerShare)
+	if schema.Amount(tx.ReinvestmentPerShare) != -0.572 {
+		t.Errorf("expected ReinvestmentPerShare=-0.572, got %f", schema.Amount(tx.ReinvestmentPerShare))
 	}
 	if tx.ReinvestmentCurrency != "USD" {
 		t.Errorf("expected ReinvestmentCurrency=USD, got %s", tx.ReinvestmentCurrency)
 	}
-	if tx.GrossAmount != -2.72 {
-		t.Errorf("expected GrossAmount=-2.72, got %f", tx.GrossAmount)
+	if schema.Amount(tx.GrossAmount) != -2.72 {
+		t.Errorf("expected GrossAmount=-2.72, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
@@ -546,11 +546,11 @@ func TestParseSavingsPlan(t *testing.T) {
 	if a.Date != "2025-01-15" {
 		t.Errorf("Date = %q, want 2025-01-15", a.Date)
 	}
-	if a.Quantity != 1.478695 {
-		t.Errorf("Quantity = %f, want 1.478695", a.Quantity)
+	if schema.Amount(a.Quantity) != 1.478695 {
+		t.Errorf("Quantity = %f, want 1.478695", schema.Amount(a.Quantity))
 	}
-	if a.Price != 134.24 {
-		t.Errorf("Price = %f, want 134.24", a.Price)
+	if schema.Amount(a.Price) != 134.24 {
+		t.Errorf("Price = %f, want 134.24", schema.Amount(a.Price))
 	}
 	if a.PriceCurrency != "EUR" {
 		t.Errorf("PriceCurrency = %q, want EUR", a.PriceCurrency)
@@ -558,8 +558,8 @@ func TestParseSavingsPlan(t *testing.T) {
 	// GrossValue is the value of the shares (Stücke x Kurs), not the Betrag
 	// column: the 200.00 settled buys 198.50 worth of shares, and the 1.50
 	// difference is a charge the Sammelabrechnung never prints as a line item.
-	if a.GrossValue != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", a.GrossValue)
+	if schema.Amount(a.GrossValue) != 198.50 {
+		t.Errorf("GrossValue = %f, want 198.50", schema.Amount(a.GrossValue))
 	}
 	if a.Costs == nil {
 		t.Fatal("Costs = nil, want the derived charge")
@@ -571,8 +571,8 @@ func TestParseSavingsPlan(t *testing.T) {
 		t.Errorf("Costs.Total = %f, want 1.50", a.Costs.Total)
 	}
 	// Buys move cash out, matching FinalAmount on a trade confirmation.
-	if a.FinalAmount != -200.00 {
-		t.Errorf("FinalAmount = %f, want -200.00", a.FinalAmount)
+	if schema.Amount(a.FinalAmount) != -200.00 {
+		t.Errorf("FinalAmount = %f, want -200.00", schema.Amount(a.FinalAmount))
 	}
 
 	b := txs[1]
@@ -584,14 +584,14 @@ func TestParseSavingsPlan(t *testing.T) {
 	}
 	// 1,436948 x 138,14 is 198.50, exactly what this row settled, so there is
 	// no gap and no charge to recover.
-	if b.GrossValue != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", b.GrossValue)
+	if schema.Amount(b.GrossValue) != 198.50 {
+		t.Errorf("GrossValue = %f, want 198.50", schema.Amount(b.GrossValue))
 	}
 	if b.Costs.Unitemised != 0 {
 		t.Errorf("Costs.Unitemised = %f, want 0", b.Costs.Unitemised)
 	}
-	if b.FinalAmount != 198.50 {
-		t.Errorf("FinalAmount = %f, want 198.50", b.FinalAmount)
+	if schema.Amount(b.FinalAmount) != 198.50 {
+		t.Errorf("FinalAmount = %f, want 198.50", schema.Amount(b.FinalAmount))
 	}
 }
 
@@ -1074,7 +1074,7 @@ func TestParseTradeCosts(t *testing.T) {
 		{"Regulierung", tx.Costs.Fees.Settlement, 2.50},
 		{"Courtage", tx.Costs.Fees.Courtage, 0.00},
 		{"Einbeh. KESt", schema.Amount(tx.WithholdingTax), 0.25},
-		{"Endbetrag", tx.FinalAmount, -2039.85},
+		{"Endbetrag", schema.Amount(tx.FinalAmount), -2039.85},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

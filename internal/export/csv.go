@@ -38,17 +38,17 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	for _, t := range txns {
 		row := []string{
 			t.Source, t.OrderNumber, t.TransactionNumber, t.DocumentType, t.ISIN, t.WKN,
-			t.SecurityName, t.Date, t.OrderDate, t.Type, formatFloat(t.Quantity), formatFloat(t.Price), t.PriceCurrency,
-			formatFloat(t.GrossValue),
+			t.SecurityName, t.Date, t.OrderDate, t.Type, formatFloatPtr(t.Quantity), formatFloatPtr(t.Price), t.PriceCurrency,
+			formatFloatPtr(t.GrossValue),
 		}
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
 			formatFloatPtr(t.WithholdingTax), formatFloatPtr(t.GainLoss), formatFloat(t.ExchangeRate),
-			formatFloat(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
-			formatFloat(t.Limit), t.ValidUntil, formatFloat(t.DistributionPerShare), t.DistributionCurrency,
-			formatFloat(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloat(t.NetAmount),
-			t.NetCurrency, t.ExDate, t.ValueDate, formatFloat(t.InterestRate), t.PeriodFrom,
-			t.PeriodTo, formatFloat(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
+			formatFloatPtr(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
+			formatFloatPtr(t.Limit), t.ValidUntil, formatFloatPtr(t.DistributionPerShare), t.DistributionCurrency,
+			formatFloatPtr(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloatPtr(t.NetAmount),
+			t.NetCurrency, t.ExDate, t.ValueDate, formatFloatPtr(t.InterestRate), t.PeriodFrom,
+			t.PeriodTo, formatFloatPtr(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
 		)
 		if err := cw.Write(row); err != nil {
 			return err

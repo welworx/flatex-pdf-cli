@@ -72,7 +72,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			t.Date,
 			ppType,
 			formatAmount(portfolioValue(t), lang),
-			formatAmount(t.Quantity, lang),
+			formatAmount(schema.Amount(t.Quantity), lang),
 			t.ISIN,
 			t.WKN,
 			t.SecurityName,
@@ -98,13 +98,16 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 // added back for a buy (more cash out) and subtracted for a sell (less cash
 // in).
 func portfolioValue(t *schema.Transaction) float64 {
-	if t.FinalAmount != 0 {
-		return math.Abs(t.FinalAmount)
+	// Falls back only when the document states no Endbetrag at all. A stated
+	// 0,00 is the settlement amount, not a missing one.
+	if t.FinalAmount != nil {
+		return math.Abs(*t.FinalAmount)
 	}
+	grossValue := schema.Amount(t.GrossValue)
 	if t.Type == "SELL" {
-		return t.GrossValue - t.TotalCosts()
+		return grossValue - t.TotalCosts()
 	}
-	return t.GrossValue + t.TotalCosts()
+	return grossValue + t.TotalCosts()
 }
 
 func ppTradeType(lang, tradeType string) (string, error) {
@@ -141,9 +144,9 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 		var value float64
 		switch t.DocumentType {
 		case "DIVIDEND":
-			ppType, value = labels["DIVIDEND"], t.NetAmount
+			ppType, value = labels["DIVIDEND"], schema.Amount(t.NetAmount)
 		case "INTEREST":
-			ppType, value = labels["INTEREST"], t.NetAmount
+			ppType, value = labels["INTEREST"], schema.Amount(t.NetAmount)
 		case "ACCUMULATING":
 			if schema.Amount(t.WithholdingTax) == 0 {
 				continue

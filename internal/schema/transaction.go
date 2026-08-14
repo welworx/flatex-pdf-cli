@@ -64,52 +64,58 @@ type Transaction struct {
 	Date      string `json:"date"`
 	OrderDate string `json:"order_date,omitempty"` // Auftragsdatum — when the order was placed
 
+	// Every amount and quantity below is a pointer, so a document printing
+	// "0,00" stays distinguishable from one that prints no such line at all.
+	// As plain float64 the two collapsed: omitempty dropped a genuine zero and
+	// a consumer read it back as "field absent". A sale closed exactly at
+	// cost, a 0% interest period and a fee-free settlement all really do state
+	// a zero. Same nil-means-absent convention as Costs below; read one with
+	// Amount where absent should behave as 0.
+	//
+	// ExchangeRate is deliberately NOT a pointer: no document states a
+	// Devisenkurs of 0,000000, and an absent one already means 1.0.
+
 	// TRADE fields
-	Type           string  `json:"type,omitempty"`
-	Quantity       float64 `json:"quantity,omitempty"`
-	Price          float64 `json:"price,omitempty"`
-	PriceCurrency  string  `json:"price_currency,omitempty"`
-	GrossValue     float64 `json:"gross_value,omitempty"`
-	// Pointers so that a document printing "0,00 EUR" stays distinguishable
-	// from one that prints no such line at all. A Verkauf sold at cost has a
-	// genuine 0,00 Gewinn/Verlust; with a plain float64 that value was dropped
-	// by omitempty and read back as "field absent". Same nil-means-absent
-	// convention as Costs below.
+	Type           string   `json:"type,omitempty"`
+	Quantity       *float64 `json:"quantity,omitempty"`
+	Price          *float64 `json:"price,omitempty"`
+	PriceCurrency  string   `json:"price_currency,omitempty"`
+	GrossValue     *float64 `json:"gross_value,omitempty"`
 	WithholdingTax *float64 `json:"withholding_tax,omitempty"`
 	GainLoss       *float64 `json:"gain_loss,omitempty"`
-	ExchangeRate   float64 `json:"exchange_rate,omitempty"`
-	FinalAmount    float64 `json:"final_amount,omitempty"`
-	FinalCurrency  string  `json:"final_currency,omitempty"`
-	CustodyType    string  `json:"custody_type,omitempty"`
-	Depositary     string  `json:"depositary,omitempty"`
-	DepositCountry string  `json:"deposit_country,omitempty"` // Lagerland, as an ISO 3166-1 alpha-2 code
-	ExecutionVenue string  `json:"execution_venue,omitempty"` // Ausf.platz/-art
-	Costs          *Costs  `json:"costs,omitempty"`
+	ExchangeRate   float64  `json:"exchange_rate,omitempty"`
+	FinalAmount    *float64 `json:"final_amount,omitempty"`
+	FinalCurrency  string   `json:"final_currency,omitempty"`
+	CustodyType    string   `json:"custody_type,omitempty"`
+	Depositary     string   `json:"depositary,omitempty"`
+	DepositCountry string   `json:"deposit_country,omitempty"` // Lagerland, as an ISO 3166-1 alpha-2 code
+	ExecutionVenue string   `json:"execution_venue,omitempty"` // Ausf.platz/-art
+	Costs          *Costs   `json:"costs,omitempty"`
 
 	// ORDER fields (Sammelauftragsbestätigung — pending orders)
-	Limit      float64 `json:"limit,omitempty"`       // Limit price
-	ValidUntil string  `json:"valid_until,omitempty"` // Gültig bis
+	Limit      *float64 `json:"limit,omitempty"`       // Limit price
+	ValidUntil string   `json:"valid_until,omitempty"` // Gültig bis
 
 	// DIVIDEND fields
-	DistributionPerShare   float64 `json:"distribution_per_share,omitempty"`
-	DistributionCurrency   string  `json:"distribution_currency,omitempty"`
-	GrossAmount            float64 `json:"gross_amount,omitempty"`
-	GrossCurrency          string  `json:"gross_currency,omitempty"`
-	WithholdingTaxCurrency string  `json:"withholding_tax_currency,omitempty"`
-	NetAmount              float64 `json:"net_amount,omitempty"`
-	NetCurrency            string  `json:"net_currency,omitempty"`
-	ExDate                 string  `json:"ex_date,omitempty"`
-	ValueDate              string  `json:"value_date,omitempty"`
+	DistributionPerShare   *float64 `json:"distribution_per_share,omitempty"`
+	DistributionCurrency   string   `json:"distribution_currency,omitempty"`
+	GrossAmount            *float64 `json:"gross_amount,omitempty"`
+	GrossCurrency          string   `json:"gross_currency,omitempty"`
+	WithholdingTaxCurrency string   `json:"withholding_tax_currency,omitempty"`
+	NetAmount              *float64 `json:"net_amount,omitempty"`
+	NetCurrency            string   `json:"net_currency,omitempty"`
+	ExDate                 string   `json:"ex_date,omitempty"`
+	ValueDate              string   `json:"value_date,omitempty"`
 
 	// INTEREST fields
-	InterestRate float64 `json:"interest_rate,omitempty"`
-	PeriodFrom   string  `json:"period_from,omitempty"`
-	PeriodTo     string  `json:"period_to,omitempty"`
+	InterestRate *float64 `json:"interest_rate,omitempty"`
+	PeriodFrom   string   `json:"period_from,omitempty"`
+	PeriodTo     string   `json:"period_to,omitempty"`
 
 	// ACCUMULATING fields
-	ReinvestmentPerShare float64 `json:"reinvestment_per_share,omitempty"`
-	ReinvestmentCurrency string  `json:"reinvestment_currency,omitempty"`
-	AccrualDate          string  `json:"accrual_date,omitempty"`
+	ReinvestmentPerShare *float64 `json:"reinvestment_per_share,omitempty"`
+	ReinvestmentCurrency string   `json:"reinvestment_currency,omitempty"`
+	AccrualDate          string   `json:"accrual_date,omitempty"`
 }
 
 // Amount returns the value p points at, or 0 when p is nil. Use it wherever an

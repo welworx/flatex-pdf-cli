@@ -11,6 +11,10 @@ import (
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
+// amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
+// the same as leaving the field nil.
+func amt(v float64) *float64 { return &v }
+
 // TestProcessPDFsContinuesPastFailures verifies that a single unparseable file
 // does not abort the whole batch: good files are still processed and each
 // failure is reported, not fatal.
@@ -67,7 +71,7 @@ func TestDiscoverPDFsFindsAndSortsRecursively(t *testing.T) {
 func TestWriteOutputCSVFormat(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 
 	if err := writeOutput("csv", out, "en", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)
@@ -92,8 +96,8 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
-		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)},
+		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: amt(10)},
 	}
 
 	if err := writeOutput("pp", out, "en", txns, nil, false); err != nil {
@@ -111,7 +115,7 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 func TestWriteOutputPPFormatRejectsUnknownLangWithoutWritingFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 
 	if err := writeOutput("pp", out, "fr", txns, nil, false); err == nil {
 		t.Fatal("expected error for unknown lang")
@@ -161,7 +165,7 @@ func captureStdout(t *testing.T, fn func()) string {
 func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789"}
 
 	// Metadata is passed but includeMetadata is false: it must not leak out.
@@ -188,7 +192,7 @@ func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 func TestWriteOutputJSONWithMetadataWrapsTransactions(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789", DepotHolder: "Max Mustermann"}
 
 	if err := writeOutput("json", out, "en", txns, meta, true); err != nil {
@@ -241,8 +245,8 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 	txns := []*schema.Transaction{{
 		DocumentType: "TRADE", ISIN: "IE000YU9K6K2", WKN: "A3DP9J",
 		Date: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
-		Quantity: 1.5, Price: 47.235, PriceCurrency: "EUR", GrossValue: 50.01,
-		FinalAmount: -56, FinalCurrency: "EUR", DepositCountry: "GB",
+		Quantity: amt(1.5), Price: amt(47.235), PriceCurrency: "EUR", GrossValue: amt(50.01),
+		FinalAmount: amt(-56), FinalCurrency: "EUR", DepositCountry: "GB",
 		Costs: &schema.Costs{Provision: 5.99, Total: 5.99},
 	}}
 
@@ -389,7 +393,7 @@ func TestDiscoverPDFsMissingPathIsAnError(t *testing.T) {
 // reported rather than swallowed on the way to writing the second.
 func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "no-such-dir", "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 
 	if err := writeOutput("pp", out, "en", txns, nil, false); err == nil {
 		t.Fatal("expected an error writing into a nonexistent directory")
@@ -399,7 +403,7 @@ func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 func TestWriteOutputPPFormatGermanLang(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
 
 	if err := writeOutput("pp", out, "de", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)

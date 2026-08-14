@@ -119,9 +119,13 @@ func validateTransaction(t *schema.Transaction) error {
 // exactly, which makes it the strongest signal available that every figure
 // landed in the field it belongs to.
 func checkSettlement(t *schema.Transaction) error {
-	if (t.Type != "BUY" && t.Type != "SELL") || t.FinalAmount == 0 || t.GrossValue == 0 {
+	// Skipped only when the document states no such figure. A stated 0,00 is
+	// checked like any other value: it used to disable this check silently,
+	// which let an impossible settlement through.
+	if (t.Type != "BUY" && t.Type != "SELL") || t.FinalAmount == nil || t.GrossValue == nil {
 		return nil
 	}
+	grossValue := schema.Amount(t.GrossValue)
 	// A purchase adds the deductions to what you pay; a sale subtracts them
 	// from what you receive. Confirmed against verkauf_sample_1: gross 1540.00
 	// less costs 8.41 less KESt 24.51 equals the stated Endbetrag of 1507.08.
@@ -131,23 +135,25 @@ func checkSettlement(t *schema.Transaction) error {
 	if t.Type == "SELL" {
 		sign, verb = -1.0, "less"
 	}
-	want := t.GrossValue + sign*(t.TotalCosts()+tax)
-	got := math.Abs(t.FinalAmount)
+	want := grossValue + sign*(t.TotalCosts()+tax)
+	got := math.Abs(schema.Amount(t.FinalAmount))
 	if math.Abs(want-got) <= absTolerance {
 		return nil
 	}
 	return fmt.Errorf("settlement total %.2f does not equal gross %.2f %s costs %.2f %s tax %.2f (expected %.2f): the statement layout may have changed",
-		got, t.GrossValue, verb, t.TotalCosts(), verb, tax, want)
+		got, grossValue, verb, t.TotalCosts(), verb, tax, want)
 }
 
 // checkProduct verifies that stated == a*b within tolerance. It is skipped when
-// any operand is zero: a document that legitimately omits one of these figures
-// is not this check's business, the per-field extraction errors already cover
-// values that are genuinely missing.
-func checkProduct(name string, a, b, stated float64) error {
-	if a == 0 || b == 0 || stated == 0 {
+// the document states no value for one of the operands: a document that
+// legitimately omits one of these figures is not this check's business, the
+// per-field extraction errors already cover values that are genuinely missing.
+// A stated 0,00 is a value and is checked.
+func checkProduct(name string, aP, bP, statedP *float64) error {
+	if aP == nil || bP == nil || statedP == nil {
 		return nil
 	}
+	a, b, stated := *aP, *bP, *statedP
 	want := a * b
 	scale := math.Abs(want)
 	if scale == 0 {

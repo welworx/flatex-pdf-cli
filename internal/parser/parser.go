@@ -138,7 +138,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	// appear here.
 	withholdingTax := floatPtr(eurField(text, `Einbeh\.[^\S\n]*KESt`))
 	gainLoss := floatPtr(eurField(text, `Gewinn/Verlust`))
-	finalAmount, _ := eurField(text, `Endbetrag`)
+	finalAmount := floatPtr(eurField(text, `Endbetrag`))
 
 	transaction := &schema.Transaction{
 		OrderNumber:       orderNumber,
@@ -151,10 +151,10 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		OrderDate:         dateField(text, `Auftragsdatum`),
 		ValueDate:         dateField(text, `Valuta`),
 		Type:              tradeType,
-		Quantity:          quantity,
-		Price:             price,
+		Quantity:          ptr(quantity),
+		Price:             ptr(price),
 		PriceCurrency:     currency,
-		GrossValue:        grossValue,
+		GrossValue:        ptr(grossValue),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
@@ -213,7 +213,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 
 	withholdingTax := floatPtr(extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`))
 	gainLoss := floatPtr(extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`))
-	finalAmount, _ := extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`)
+	finalAmount := floatPtr(extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`))
 
 	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
 	if err != nil {
@@ -227,10 +227,10 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		SecurityName:      name,
 		Date:              date,
 		Type:              tradeType,
-		Quantity:          quantity,
-		Price:             price,
+		Quantity:          ptr(quantity),
+		Price:             ptr(price),
 		PriceCurrency:     "EUR",
-		GrossValue:        grossValue,
+		GrossValue:        ptr(grossValue),
 		Costs:             extractCosts(text),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
@@ -279,9 +279,9 @@ func parseOrderConfirmation(doc *extractor.ExtractedDocument) ([]*schema.Transac
 			WKN:          m[4],
 			Type:         tradeType,
 			Date:         convertGermanDate(m[6]),
-			Quantity:     mustFloat(m[7]),
+			Quantity:     ptr(mustFloat(m[7])),
 			ValidUntil:   convertGermanDate(m[8]),
-			Limit:        mustFloat(m[9]),
+			Limit:        ptr(mustFloat(m[9])),
 		})
 	}
 	return txs, nil
@@ -380,14 +380,14 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		ISIN:                   isin,
 		WKN:                    wkn,
 		Date:                   valueDate,
-		Quantity:               quantity,
-		DistributionPerShare:   distributionPerShare,
+		Quantity:               ptr(quantity),
+		DistributionPerShare:   ptr(distributionPerShare),
 		DistributionCurrency:   distributionCurrency,
-		GrossAmount:            grossAmount,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		NetAmount:              netAmount,
+		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
 		ExchangeRate:           exchangeRate,
 		ExDate:                 exDate,
@@ -475,13 +475,13 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		ISIN:                   isin,
 		WKN:                    wkn,
 		Date:                   valueDate,
-		GrossAmount:            grossAmount,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		NetAmount:              netAmount,
+		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
-		InterestRate:           interestRate,
+		InterestRate:           ptr(interestRate),
 		PeriodFrom:             periodFrom,
 		PeriodTo:               periodTo,
 	}
@@ -572,10 +572,10 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		ISIN:                   isin,
 		WKN:                    wkn,
 		Date:                   valueDate,
-		Quantity:               quantity,
-		ReinvestmentPerShare:   reinvestmentPerShare,
+		Quantity:               ptr(quantity),
+		ReinvestmentPerShare:   ptr(reinvestmentPerShare),
 		ReinvestmentCurrency:   reinvestmentCurrency,
-		GrossAmount:            grossAmount,
+		GrossAmount:            ptr(grossAmount),
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
@@ -647,12 +647,12 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			Date:          convertGermanDate(m[2]), // Buchtag — the trade date of the row
 			ValueDate:     convertGermanDate(m[3]), // Valuta — settlement
 			Type:          tradeType,
-			Quantity:      quantity,
-			Price:         price,
+			Quantity:      ptr(quantity),
+			Price:         ptr(price),
 			PriceCurrency: "EUR",
-			GrossValue:    shareValue,
+			GrossValue:    ptr(shareValue),
 			Costs:         &schema.Costs{Unitemised: charge, Total: charge},
-			FinalAmount:   finalAmount,
+			FinalAmount:   ptr(finalAmount),
 			FinalCurrency: "EUR",
 			// Savings-plan rows are settled in EUR and carry no Devisenkurs
 			// line; without an explicit 1.0 the PP export writes an exchange
@@ -682,6 +682,10 @@ func dateField(text, label string) string {
 func eurField(text, label string) (float64, error) {
 	return extractFloat(text, label+hSpace+`:?`+hSpace+`(-?[\d.,]+)`+hSpace+`EUR`)
 }
+
+// ptr boxes an amount the parser has already established is present, for the
+// fields whose extraction fails the whole parse when the label is missing.
+func ptr(v float64) *float64 { return &v }
 
 // floatPtr adapts an (value, error) extraction pair to the nil-means-absent
 // convention: nil when the label was not found, otherwise a pointer to the

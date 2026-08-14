@@ -14,8 +14,8 @@ func amt(v float64) *float64 { return &v }
 
 func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Costs: &schema.Costs{Provision: 5, Total: 5}},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50), Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossValue: amt(60), Costs: &schema.Costs{Provision: 5, Total: 5}},
 		{DocumentType: "ORDER", ISIN: "IE000YU9K6K2", Date: "2024-06-17"}, // pending, must be skipped
 	}
 
@@ -38,7 +38,7 @@ func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 
 func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: 0.01, GrossValue: 500, Costs: &schema.Costs{Provision: 10, Total: 10}, FinalAmount: -510},
+		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: amt(0.01), GrossValue: amt(500), Costs: &schema.Costs{Provision: 10, Total: 10}, FinalAmount: amt(-510)},
 	}
 
 	var buf bytes.Buffer
@@ -55,8 +55,8 @@ func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 
 func TestWriteAccountTransactionsMapsTypes(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
-		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: 2},
+		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: amt(10)},
+		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: amt(2)},
 		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: amt(3)},
 		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-18", WithholdingTax: amt(0)}, // no real cash movement, must be skipped
 	}
@@ -98,9 +98,9 @@ func TestValidLang(t *testing.T) {
 // file and must never appear as cash-account rows.
 func TestWriteAccountTransactionsSkipsPortfolioDocumentTypes(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", GrossValue: 50},
-		{DocumentType: "CRYPTO", ISIN: "X", Date: "2024-06-16", Type: "BUY", FinalAmount: 100},
-		{DocumentType: "SAVINGSPLAN", ISIN: "Y", Date: "2024-06-17", Type: "BUY", GrossValue: 25},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", GrossValue: amt(50)},
+		{DocumentType: "CRYPTO", ISIN: "X", Date: "2024-06-16", Type: "BUY", FinalAmount: amt(100)},
+		{DocumentType: "SAVINGSPLAN", ISIN: "Y", Date: "2024-06-17", Type: "BUY", GrossValue: amt(25)},
 		{DocumentType: "ORDER", ISIN: "Z", Date: "2024-06-18"},
 	}
 
@@ -158,8 +158,8 @@ func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 
 func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Costs: &schema.Costs{Provision: 5, Total: 5}},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: 1, GrossValue: 60, Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50), Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossValue: amt(60), Costs: &schema.Costs{Provision: 5, Total: 5}},
 	}
 
 	var buf bytes.Buffer
@@ -181,7 +181,7 @@ func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 
 func TestWritePortfolioTransactionsGermanUsesSemicolonDelimiter(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)},
 	}
 
 	var buf bytes.Buffer
@@ -195,7 +195,7 @@ func TestWritePortfolioTransactionsGermanUsesSemicolonDelimiter(t *testing.T) {
 
 func TestWritePortfolioTransactionsGermanUsesCommaDecimalSeparator(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "SAVINGSPLAN", ISIN: "IE00B3RBWM25", Date: "2025-01-15", Type: "BUY", Quantity: 1.478695, Price: 134.24, GrossValue: 200.00},
+		{DocumentType: "SAVINGSPLAN", ISIN: "IE00B3RBWM25", Date: "2025-01-15", Type: "BUY", Quantity: amt(1.478695), Price: amt(134.24), GrossValue: amt(200.00)},
 	}
 
 	var buf bytes.Buffer
@@ -213,8 +213,8 @@ func TestWritePortfolioTransactionsGermanUsesCommaDecimalSeparator(t *testing.T)
 
 func TestWriteAccountTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
-		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: 2},
+		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: amt(10)},
+		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: amt(2)},
 		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: amt(3)},
 	}
 

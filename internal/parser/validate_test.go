@@ -20,86 +20,102 @@ func TestValidateTransaction(t *testing.T) {
 	}{
 		{
 			name:    "trade reconciles",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 2034.20},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(2034.20)},
 			wantErr: false,
 		},
 		{
 			name:    "trade gross off by a column",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 3.00},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(3.00)},
 			wantErr: true,
 		},
 		{
 			name:    "trade within rounding tolerance",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: 0.685401, Price: 72.95, PriceCurrency: "EUR", GrossValue: 50.00},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(0.685401), Price: amt(72.95), PriceCurrency: "EUR", GrossValue: amt(50.00)},
 			wantErr: false,
 		},
 		{
 			name: "crypto is not reconstructed from its coarse quantity",
 			// 0,014 St. printed to three decimals cannot reproduce the gross
 			// value closely enough to check; only the settlement line applies.
-			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: 0.014, Price: 72462.22, PriceCurrency: "EUR", GrossValue: 1014.47, FinalAmount: -1019.54, Costs: &schema.Costs{Total: 5.07}},
+			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), PriceCurrency: "EUR", GrossValue: amt(1014.47), FinalAmount: amt(-1019.54), Costs: &schema.Costs{Total: 5.07}},
 			wantErr: false,
 		},
 		{
 			name:    "crypto settlement does not add up",
-			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: 0.014, Price: 72462.22, PriceCurrency: "EUR", GrossValue: 1014.47, FinalAmount: -1019.54, Costs: &schema.Costs{Total: 99.00}},
+			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), PriceCurrency: "EUR", GrossValue: amt(1014.47), FinalAmount: amt(-1019.54), Costs: &schema.Costs{Total: 99.00}},
 			wantErr: true,
 		},
 		{
 			name:    "trade settlement adds up",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 2034.20, FinalAmount: -2037.20, Costs: &schema.Costs{Total: 3.00}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(2034.20), FinalAmount: amt(-2037.20), Costs: &schema.Costs{Total: 3.00}},
 			wantErr: false,
 		},
 		{
 			name: "sale settlement adds up",
 			// verkauf_sample_1's real figures: the deductions come off the
 			// proceeds rather than being added to them.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1507.08, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), PriceCurrency: "EUR", GrossValue: amt(1540.00), FinalAmount: amt(1507.08), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
 			wantErr: false,
 		},
 		{
 			name:    "sale settlement does not add up",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1600.00, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), PriceCurrency: "EUR", GrossValue: amt(1540.00), FinalAmount: amt(1600.00), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
 			wantErr: true,
 		},
 		{
 			name: "sale deductions must not be added like a purchase",
 			// 1540.00 + 8.41 + 24.51 = 1572.92 is what a buy would settle at.
 			// This case fails if the sale ever reverts to the purchase sign.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1572.92, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), PriceCurrency: "EUR", GrossValue: amt(1540.00), FinalAmount: amt(1572.92), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
 			wantErr: true,
 		},
 		{
-			name:    "missing settlement total is skipped",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 2034.20, FinalAmount: 0},
+			name: "missing settlement total is skipped",
+			// Absent means the document printed no Endbetrag: FinalAmount nil.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(2034.20)},
 			wantErr: false,
+		},
+		{
+			name: "a stated 0,00 settlement is checked, not skipped",
+			// The document printed "Endbetrag: 0,00 EUR", which cannot be right
+			// for a 2034.20 purchase. A plain float64 made this indistinguishable
+			// from "no Endbetrag" and the check was silently skipped.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(2034.20), FinalAmount: amt(0), Costs: &schema.Costs{Total: 3.00}},
+			wantErr: true,
 		},
 		{
 			name: "trade in foreign currency is not cross-checked",
 			// Kurs is extracted in EUR while Kurswert here is USD; the two are
 			// related by Devisenkurs, so the identity must not be applied.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: 35, Price: 58.12, PriceCurrency: "USD", GrossValue: 2200.00},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "USD", GrossValue: amt(2200.00)},
 			wantErr: false,
 		},
 		{
-			name:    "missing operand is left to the extraction errors",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: 35, Price: 0, PriceCurrency: "EUR", GrossValue: 2034.20},
+			name: "missing operand is left to the extraction errors",
+			// Absent means the document printed no Kurs at all: Price nil.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(35), PriceCurrency: "EUR", GrossValue: amt(2034.20)},
 			wantErr: false,
+		},
+		{
+			name: "a stated price of 0,00 is checked, not skipped",
+			// 35 x 0,00 cannot produce a gross value of 2034.20.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Quantity: amt(35), Price: amt(0), PriceCurrency: "EUR", GrossValue: amt(2034.20)},
+			wantErr: true,
 		},
 		{
 			name:    "dividend reconciles",
-			txn:     &schema.Transaction{DocumentType: "DIVIDEND", Quantity: 74.45, DistributionPerShare: 0.4227, DistributionCurrency: "USD", GrossAmount: 31.47, GrossCurrency: "USD"},
+			txn:     &schema.Transaction{DocumentType: "DIVIDEND", Quantity: amt(74.45), DistributionPerShare: amt(0.4227), DistributionCurrency: "USD", GrossAmount: amt(31.47), GrossCurrency: "USD"},
 			wantErr: false,
 		},
 		{
 			name:    "dividend gross wrong",
-			txn:     &schema.Transaction{DocumentType: "DIVIDEND", Quantity: 74.45, DistributionPerShare: 0.4227, DistributionCurrency: "USD", GrossAmount: 4.41, GrossCurrency: "USD"},
+			txn:     &schema.Transaction{DocumentType: "DIVIDEND", Quantity: amt(74.45), DistributionPerShare: amt(0.4227), DistributionCurrency: "USD", GrossAmount: amt(4.41), GrossCurrency: "USD"},
 			wantErr: true,
 		},
 		{
 			name: "savings plan is not cross-checked",
 			// The plan's Kurswert is the order amount, not the share value.
-			txn:     &schema.Transaction{DocumentType: "SAVINGSPLAN", Quantity: 1.4787, Price: 134.24, PriceCurrency: "EUR", GrossValue: 200.00},
+			txn:     &schema.Transaction{DocumentType: "SAVINGSPLAN", Quantity: amt(1.4787), Price: amt(134.24), PriceCurrency: "EUR", GrossValue: amt(200.00)},
 			wantErr: false,
 		},
 	}
@@ -128,16 +144,16 @@ func TestValidateFiresOnRealDocuments(t *testing.T) {
 		file    string
 		corrupt func(*schema.Transaction)
 	}{
-		{"trade_sample_1.pdf", func(x *schema.Transaction) { x.GrossValue *= 10 }},
-		{"trade_sample_2.pdf", func(x *schema.Transaction) { x.GrossValue *= 10 }},
-		{"krypto_sample_1.pdf", func(x *schema.Transaction) { x.GrossValue *= 10 }},
-		{"dividend_sample_1.pdf", func(x *schema.Transaction) { x.GrossAmount *= 10 }},
-		{"dividend_sample_2.pdf", func(x *schema.Transaction) { x.GrossAmount *= 10 }},
+		{"trade_sample_1.pdf", func(x *schema.Transaction) { *x.GrossValue *= 10 }},
+		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.GrossValue *= 10 }},
+		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.GrossValue *= 10 }},
+		{"dividend_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
+		{"dividend_sample_2.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
 		// The settlement identity is what covers crypto, so corrupt the
 		// settlement side directly to prove that path runs on a real document
 		// rather than riding on the gross-value check above.
-		{"krypto_sample_1.pdf", func(x *schema.Transaction) { x.FinalAmount += 100 }},
-		{"trade_sample_2.pdf", func(x *schema.Transaction) { x.FinalAmount += 100 }},
+		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.FinalAmount += 100 }},
+		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.FinalAmount += 100 }},
 	}
 
 	for _, tc := range tests {
@@ -164,7 +180,7 @@ func TestValidateFiresOnRealDocuments(t *testing.T) {
 
 func TestValidateErrorNamesTheProblem(t *testing.T) {
 	err := validateTransaction(&schema.Transaction{
-		DocumentType: "TRADE", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 3.00,
+		DocumentType: "TRADE", Quantity: amt(35), Price: amt(58.12), PriceCurrency: "EUR", GrossValue: amt(3.00),
 	})
 	if err == nil {
 		t.Fatal("expected an error")
