@@ -237,13 +237,16 @@ with depot metadata:
 
 Five things worth knowing before you use the numbers:
 
-- **Numbers keep the document's own precision.** `Kurs : 110,000000 EUR`
-  emits as `110.000000` and `Ausgeführt : 14 St.` as `14`, because a price
-  quoted to six places is a different claim from one quoted to two. Figures
-  this tool derives rather than reads (`costs.total`, `costs.unitemised`, a
-  savings plan's `gross_amount`) carry at least two places. They are ordinary
-  JSON numbers throughout, so a consumer that does not care can ignore all of
-  this.
+- **Numbers keep the document's own precision, and nothing is rounded.**
+  `Kurs : 110,000000 EUR` emits as `110.000000` and `Ausgeführt : 14 St.` as
+  `14`, because a price quoted to six places is a different claim from one
+  quoted to two. Figures this tool derives rather than reads (`costs.total`,
+  `costs.unitemised`, a savings plan's `gross_amount`) are computed in exact
+  decimal arithmetic and keep every place they have, padded to at least two
+  because they are currency. They are ordinary JSON numbers throughout, so a
+  consumer that does not care can ignore all of this. One caveat on the
+  savings-plan figures: see
+  [Known Limitations](#known-limitations).
 - **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
   crypto and savings plans) — not the date printed at the top of the letter.
   `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
@@ -275,16 +278,24 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
-- **Savings-plan charges are derived, not read.** A `Sammelabrechnung aus`
-  prints only the amount settled per row, never a fee line: a 200,00 EUR
-  execution at 134,2400 EUR buys 1,478695 shares, which is 198,50 EUR of stock,
-  and the missing 1,50 EUR is a charge the document does not itemise. The
-  parser recovers it as that gap and reports it as `costs.unitemised`, kept
-  separate from `provision` / `own_expenses` / `foreign_expenses` because those
-  carry a label the statement actually printed and this one does not. Run with
-  `-verbose` to see the arithmetic per row. A gap that is negative, or larger
+- **Savings-plan charges are derived, not read — and their last places are
+  noise.** A `Sammelabrechnung aus` prints only the amount settled per row,
+  never a fee line: a 200,00 EUR execution at 134,2400 EUR buys 1,478695
+  shares, worth 198,5000168 EUR, and the missing 1,4999832 EUR is a charge the
+  document does not itemise. The parser recovers it as that gap and reports it
+  as `costs.unitemised`, kept separate from `provision` / `own_expenses` /
+  `foreign_expenses` because those carry a label the statement actually printed
+  and this one does not.
+
+  That charge is almost certainly exactly 1,50 EUR. The trailing digits come
+  from the quantity being printed to only six decimals, so a share value
+  rebuilt from it lands a fraction of a cent either side of the truth. They are
+  reported as computed rather than rounded away — which keeps `gross_amount +
+  costs.total` reconciling to the settled amount exactly — but treat anything
+  past the cent as noise, not precision. Run with `-verbose` to see the
+  arithmetic per row. A gap that is negative by more than a cent, or larger
   than 5% of the amount settled, is treated as a layout change and fails the
-  parse rather than being booked as an implausibly large fee.
+  parse rather than being booked as an implausible fee.
 - **German-language PDFs only.** Document-type detection and field extraction
   are keyed to German labels (`Wertpapierabrechnung`, `Valuta`,
   `Devisenkurs`, …); non-German statements are detected and rejected with an

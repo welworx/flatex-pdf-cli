@@ -34,15 +34,50 @@ func TestDecimalMarshalsAtPrintedScale(t *testing.T) {
 	}
 }
 
-// Computed floors at the cent: a value this package worked out has no printed
-// precision to inherit, but it is still money.
-func TestComputedFloorsAtTwoPlaces(t *testing.T) {
-	if got := Computed(8.4, 0).String(); got != "8.40" {
-		t.Errorf("Computed(8.4, 0) = %s, want 8.40", got)
+// Computed floors at the cent without ever rounding: a value this package
+// supplies has no printed precision to inherit, but it is still money.
+func TestComputedFloorsAtTwoPlacesWithoutRounding(t *testing.T) {
+	for _, tc := range []struct {
+		value float64
+		want  string
+	}{
+		{8.4, "8.40"},            // padded up to the cent
+		{0, "0.00"},              // a charge of nothing is still 0,00 EUR
+		{1, "1.00"},              // the exchange rate supplied for a EUR document
+		{1.4999832, "1.4999832"}, // NOT rounded to 1.50
+		{198.5000168, "198.5000168"},
+	} {
+		if got := Computed(tc.value).String(); got != tc.want {
+			t.Errorf("Computed(%v) = %s, want %s", tc.value, got, tc.want)
+		}
 	}
-	// An input that carried more places is not truncated back to two.
-	if got := Computed(1.5, 6).String(); got != "1.500000" {
-		t.Errorf("Computed(1.5, 6) = %s, want 1.500000", got)
+}
+
+// Deriving one amount from others must be exact. In float64 these identities
+// all miss: 5.90+0.00+2.51 gives 8.409999999999999, and the old code hid that
+// by snapping the result back to the cent — which also destroyed the genuine
+// extra places in a share value.
+func TestArithmeticIsExact(t *testing.T) {
+	if got := Sum(Num(5.90, 2), Num(0, 2), Num(2.51, 2)).String(); got != "8.41" {
+		t.Errorf("Sum(5.90, 0.00, 2.51) = %s, want 8.41", got)
+	}
+
+	// 1,478695 shares at 134,2400 — a six-place quantity times a four-place
+	// price, so the product genuinely has ten places and keeps the seven it
+	// needs. Rounding this to 198.50 is what produced a phantom 1.50 charge.
+	shareValue := Mul(Num(1.478695, 6), Num(134.24, 4))
+	if got := shareValue.String(); got != "198.5000168" {
+		t.Errorf("Mul(1.478695, 134.2400) = %s, want 198.5000168", got)
+	}
+
+	charge := Sub(Num(200, 2), shareValue)
+	if got := charge.String(); got != "1.4999832" {
+		t.Errorf("200.00 - 198.5000168 = %s, want 1.4999832", got)
+	}
+
+	// The whole point: the parts add back up to the settled amount exactly.
+	if got := Sum(shareValue, charge).String(); got != "200.00" {
+		t.Errorf("share value plus charge = %s, want 200.00", got)
 	}
 }
 

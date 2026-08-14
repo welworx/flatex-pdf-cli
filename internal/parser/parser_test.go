@@ -609,19 +609,24 @@ func TestParseSavingsPlan(t *testing.T) {
 		t.Errorf("GrossCurrency = %q, want EUR", a.GrossCurrency)
 	}
 	// GrossAmount is the value of the shares (Stücke x Kurs), not the Betrag
-	// column: the 200.00 settled buys 198.50 worth of shares, and the 1.50
-	// difference is a charge the Sammelabrechnung never prints as a line item.
-	if schema.Amount(a.GrossAmount) != 198.50 {
-		t.Errorf("GrossAmount = %f, want 198.50", schema.Amount(a.GrossAmount))
+	// column: the 200.00 settled buys 198.5000168 worth of shares, and the
+	// rest is a charge the Sammelabrechnung never prints as a line item.
+	//
+	// Both are carried exactly. 1,478695 x 134,2400 has ten decimal places and
+	// the parser keeps the seven it needs; it used to snap them to 198.50 and
+	// report a charge of exactly 1.50, a rounder number than the document's
+	// own figures produce.
+	if got := a.GrossAmount.String(); got != "198.5000168" {
+		t.Errorf("GrossAmount = %s, want 198.5000168", got)
 	}
 	if a.Costs == nil {
 		t.Fatal("Costs = nil, want the derived charge")
 	}
-	if schema.Amount(a.Costs.Unitemised) != 1.50 {
-		t.Errorf("Costs.Unitemised = %f, want 1.50", schema.Amount(a.Costs.Unitemised))
+	if got := a.Costs.Unitemised.String(); got != "1.4999832" {
+		t.Errorf("Costs.Unitemised = %s, want 1.4999832", got)
 	}
-	if a.Costs.Total.Float() != 1.50 {
-		t.Errorf("Costs.Total = %f, want 1.50", a.Costs.Total.Float())
+	if got := a.Costs.Total.String(); got != "1.4999832" {
+		t.Errorf("Costs.Total = %s, want 1.4999832", got)
 	}
 	// Buys move cash out, matching NetAmount on a trade confirmation.
 	if schema.Amount(a.NetAmount) != -200.00 {
@@ -635,13 +640,17 @@ func TestParseSavingsPlan(t *testing.T) {
 	if b.Date != "2025-02-17" {
 		t.Errorf("Date = %q, want 2025-02-17", b.Date)
 	}
-	// 1,436948 x 138,14 is 198.50, exactly what this row settled, so there is
-	// no gap and no charge to recover.
-	if schema.Amount(b.GrossAmount) != 198.50 {
-		t.Errorf("GrossAmount = %f, want 198.50", schema.Amount(b.GrossAmount))
+	// 1,436948 x 138,1400 is 198.49999672 against a settled 198.50, so this row
+	// charged nothing. The gap is -0.00000328: the share value is rebuilt from
+	// a quantity the document rounds to six places, so it lands a fraction of
+	// a cent either side of the truth. That is reported as computed rather
+	// than nudged to zero, and the bound in unitemisedCharge tolerates it
+	// instead of reading it as a negative fee.
+	if got := b.GrossAmount.String(); got != "198.49999672" {
+		t.Errorf("GrossAmount = %s, want 198.49999672", got)
 	}
-	if schema.Amount(b.Costs.Unitemised) != 0 {
-		t.Errorf("Costs.Unitemised = %f, want 0", schema.Amount(b.Costs.Unitemised))
+	if got := b.Costs.Unitemised.String(); got != "-0.00000328" {
+		t.Errorf("Costs.Unitemised = %s, want -0.00000328", got)
 	}
 	if schema.Amount(b.NetAmount) != 198.50 {
 		t.Errorf("NetAmount = %f, want 198.50", schema.Amount(b.NetAmount))

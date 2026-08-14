@@ -113,8 +113,8 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
 	if err != nil {
 		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it carries the computed floor of 2 places.
-		exchangeRate = schema.Computed(1, 0)
+		// here rather than read, so it is spelled 1.00 like other currency.
+		exchangeRate = schema.Computed(1)
 	}
 
 	// Extract WKN from ISIN/WKN pattern (e.g., "IE000YU9K6K2/A3DP9J")
@@ -221,8 +221,8 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
 	if err != nil {
 		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it carries the computed floor of 2 places.
-		exchangeRate = schema.Computed(1, 0)
+		// here rather than read, so it is spelled 1.00 like other currency.
+		exchangeRate = schema.Computed(1)
 	}
 
 	return &schema.Transaction{
@@ -375,8 +375,8 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`)
 	if err != nil {
 		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it carries the computed floor of 2 places.
-		exchangeRate = schema.Computed(1, 0)
+		// here rather than read, so it is spelled 1.00 like other currency.
+		exchangeRate = schema.Computed(1)
 	}
 
 	// Extract WKN from ISIN/WKN pattern
@@ -569,8 +569,8 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
 	if err != nil {
 		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it carries the computed floor of 2 places.
-		exchangeRate = schema.Computed(1, 0)
+		// here rather than read, so it is spelled 1.00 like other currency.
+		exchangeRate = schema.Computed(1)
 	}
 
 	// Extract WKN from ISIN/WKN pattern
@@ -636,9 +636,15 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		// GrossAmount meaning the same thing it means on a trade confirmation
 		// (Kurswert, shares only) instead of silently folding a fee into the
 		// purchase price.
+		//
+		// Both the share value and the charge are exact: 1,478695 shares at
+		// 134,2400 is 198,5000168 to the ten places a six-place quantity times
+		// a four-place price actually has, and the charge is the 1,4999832
+		// left over. Snapping either to the cent, as this used to, reported a
+		// charge of 1,50 that the arithmetic never produced.
 		settled := mustFloat(m[6])
-		shareValue := roundCents(quantity.Float() * price.Float())
-		charge, err := unitemisedCharge(tradeType, settled.Float(), shareValue)
+		shareValue := schema.Mul(quantity, price)
+		charge, err := unitemisedCharge(tradeType, settled, shareValue)
 		if err != nil {
 			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
 		}
@@ -664,23 +670,23 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			GrossCurrency: "EUR",
 			// Both are worked out here rather than printed: the row states
 			// only Stücke, Kurs and Betrag.
-			GrossAmount: computed(shareValue, settled.Scale()),
+			GrossAmount: &shareValue,
 			// The row prints no Provision or Spesen line at all, so those stay
 			// at nothing — spelled 0.00 like every other currency figure
 			// rather than the bare 0 a zero-value Decimal renders.
 			Costs: &schema.Costs{
-				Provision:       schema.Computed(0, 0),
-				OwnExpenses:     schema.Computed(0, 0),
-				ForeignExpenses: schema.Computed(0, 0),
-				Unitemised:      computed(charge, settled.Scale()),
-				Total:           schema.Computed(charge, settled.Scale()),
+				Provision:       schema.Computed(0),
+				OwnExpenses:     schema.Computed(0),
+				ForeignExpenses: schema.Computed(0),
+				Unitemised:      &charge,
+				Total:           charge,
 			},
 			NetAmount:   ptr(finalAmount),
 			NetCurrency: "EUR",
 			// Savings-plan rows are settled in EUR and carry no Devisenkurs
 			// line; without an explicit 1 the PP export writes an exchange
 			// rate of 0.
-			ExchangeRate: computed(1, 0),
+			ExchangeRate: computed(1),
 		})
 	}
 
@@ -727,12 +733,10 @@ func floatPtr(v schema.Decimal, err error) *schema.Decimal {
 	return &v
 }
 
-// computed boxes an amount this package worked out rather than read off the
-// document, floored at two decimal places. scaleOf reports the precision of
-// the inputs it was derived from, so a figure computed from six-place inputs
-// keeps six.
-func computed(v float64, scale int) *schema.Decimal {
-	d := schema.Computed(v, scale)
+// computed boxes a currency amount this package supplies rather than reads,
+// floored at two decimal places.
+func computed(v float64) *schema.Decimal {
+	d := schema.Computed(v)
 	return &d
 }
 
@@ -758,15 +762,14 @@ func extractCosts(text string) *schema.Costs {
 	own := feeLine(text, `Eigene[^\S\n]*Spesen`)
 	foreign := feeLine(text, `Fremde[^\S\n]*Spesen`)
 
-	// Total is the one figure here the document does not print, so it takes
-	// the computed floor of two places, widened if any charge it sums was
-	// printed with more.
-	total := provision.Float() + own.Float() + foreign.Float()
+	// Total is the one figure here the document does not print. Summed
+	// exactly, so it is the true total rather than a float sum snapped back
+	// to the cent to hide its own error.
 	c := &schema.Costs{
 		Provision:       provision,
 		OwnExpenses:     own,
 		ForeignExpenses: foreign,
-		Total:           schema.Computed(total, maxScale(provision, own, foreign)),
+		Total:           schema.Sum(provision, own, foreign),
 	}
 
 	// The itemised lines are only meaningful under their "Enthalten sind
@@ -792,21 +795,9 @@ func extractCosts(text string) *schema.Costs {
 func feeLine(text, label string) schema.Decimal {
 	f, err := eurField(text, label)
 	if err != nil {
-		return schema.Computed(0, 0)
+		return schema.Computed(0)
 	}
 	return f
-}
-
-// maxScale returns the widest printed precision among the given amounts, so a
-// figure derived from them is not rendered to fewer places than its inputs.
-func maxScale(ds ...schema.Decimal) int {
-	max := 0
-	for _, d := range ds {
-		if d.Scale() > max {
-			max = d.Scale()
-		}
-	}
-	return max
 }
 
 // extractFloat extracts a number from text using a regex pattern, keeping the

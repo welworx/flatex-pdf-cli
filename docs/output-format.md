@@ -100,12 +100,25 @@ plain floats, `110,000000` and `14` both collapse and the distinction is gone.
 These are still ordinary JSON numbers (`1540.00` parses as `1540`), so a
 consumer that does not care about the digits does not have to do anything.
 
-Values this tool **derives** rather than reads have no printed precision to
-inherit, so they carry at least two places — the cent, the smallest unit these
-documents settle in. `costs.total`, `costs.unitemised`, a savings plan's
-`gross_amount`, and the `exchange_rate` of `1.00` supplied when a document
-prints no Devisenkurs are all in this group. A derived value whose inputs
-carried more places keeps the wider one.
+**Nothing is rounded.** Values this tool derives rather than reads —
+`costs.total`, `costs.unitemised`, a savings plan's `gross_amount` — are
+computed in exact decimal arithmetic and reported with every place they have,
+padded to a minimum of two because they are currency. A savings-plan row of
+`1,478695` shares at `134,2400 EUR` gives a share value of `198.5000168` and a
+charge of `1.4999832`, not `198.50` and `1.50`.
+
+> **Read the last places with care.** A savings plan prints its quantity to six
+> decimals, so a share value rebuilt from it lands a fraction of a cent either
+> side of the truth. `1.4999832` is a charge that is almost certainly exactly
+> `1,50 EUR` — the trailing digits are the printed quantity's rounding, not
+> precision the statement has. They are reported as computed rather than
+> tidied away, which means the figures reconcile exactly
+> (`gross_amount + costs.total` is the settled amount to the cent) but the
+> final places carry no information. Round them yourself if you are presenting
+> the charge to a human.
+
+The `exchange_rate` of `1.00` supplied when a document prints no Devisenkurs is
+in the same derived group.
 
 The Portfolio Performance export (`-format pp`) is deliberately exempt: it
 re-parses its columns and derives several of them, so it keeps shortest-form

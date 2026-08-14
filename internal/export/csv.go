@@ -71,7 +71,7 @@ func costColumns(c *schema.Costs) []string {
 	if f == nil {
 		// Zero-filled as currency, so these cells read 0.00 like every other
 		// charge column rather than the bare 0 a zero-value Decimal renders.
-		z := schema.Computed(0, 0)
+		z := schema.Computed(0)
 		f = &schema.FeeBreakdown{
 			Courtage: z, TradingFee: z, Settlement: z, ClosingNotes: z,
 			LSAllocation: z, FinancialTransactionTax: z, Other: z,

@@ -47,25 +47,30 @@ const maxUnitemisedShare = 0.05
 // difference between the cash that moved and the value of the shares. A
 // purchase settles more than the shares are worth, a sale settles less, so the
 // charge is positive either way.
-func unitemisedCharge(tradeType string, settled, shareValue float64) (float64, error) {
-	charge := roundCents(settled - shareValue)
+//
+// The subtraction is exact and the result keeps every place it has. It used to
+// be snapped to whole cents on the grounds that a share value reconstructed
+// from a printed quantity lands fractions of a cent off — true, but the fix
+// reported a charge the document's own figures never produced. The fractions
+// are what the statement implies; rounding them away invents a rounder number
+// than the arithmetic supports.
+func unitemisedCharge(tradeType string, settled, shareValue schema.Decimal) (schema.Decimal, error) {
+	charge := schema.Sub(settled, shareValue)
 	if tradeType == "SELL" {
-		charge = roundCents(shareValue - settled)
+		charge = schema.Sub(shareValue, settled)
 	}
-	if charge < 0 || charge > math.Abs(settled)*maxUnitemisedShare {
-		return 0, fmt.Errorf(
-			"settled amount %.2f and share value %.2f differ by %.2f, which is too large to be an unitemised charge: the statement layout may have changed",
+	// The lower bound allows a cent of slack rather than demanding a
+	// non-negative charge. The share value is reconstructed from a quantity
+	// the document rounds to six places, so it lands a fraction of a cent
+	// either side of the truth: a row that really charged nothing can compute
+	// to -0.00000328. That is noise in the last places, not a negative fee,
+	// and it is far below the swapped-column error this bound exists to catch.
+	if v := charge.Float(); v < -absTolerance || v > math.Abs(settled.Float())*maxUnitemisedShare {
+		return schema.Decimal{}, fmt.Errorf(
+			"settled amount %s and share value %s differ by %s, which is not a plausible unitemised charge: the statement layout may have changed",
 			settled, shareValue, charge)
 	}
 	return charge, nil
-}
-
-// roundCents snaps a computed amount to whole cents. Reconstructing a share
-// value from a printed quantity lands fractions of a cent off, and a currency
-// amount carried at that precision only propagates noise into every figure
-// derived from it.
-func roundCents(v float64) float64 {
-	return math.Round(v*100) / 100
 }
 
 // validate cross-checks amounts that a document states in more than one place.
