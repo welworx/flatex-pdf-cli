@@ -188,7 +188,7 @@ report. Pure cash events (`DIVIDEND`, `INTEREST`, `ACCUMULATING`) have neither;
 they carry `value_date`. A pending `ORDER` has not executed, so it carries only
 `order_date`.
 
-> **Removed in v0.3.0.** There used to be a single `date` field holding
+> **Removed in v0.7.0.** There used to be a single `date` field holding
 > whichever of these mattered for the document type — the trade date on a
 > trade, the value date on a dividend. It read as an extracted field and was
 > not one: its meaning changed underneath a consumer depending on what it was
@@ -250,7 +250,7 @@ and everything under `costs` are unsigned magnitudes; the direction they apply
 in follows from `type`. Summing `net_amount` across a mixed batch is
 meaningful, summing `gross_amount` across one is not.
 
-> **Renamed in v0.3.0.** These fields were previously spelled `gross_value`,
+> **Renamed in v0.7.0.** These fields were previously spelled `gross_value`,
 > `final_amount`, `final_currency` and `price_currency` on trades, and
 > `gross_amount`, `net_amount`, `net_currency`, `gross_currency` on dividends —
 > two names for each of the same quantities. `price_currency` was doubly
@@ -302,7 +302,7 @@ charge line reads `* Fremde Spesen`, and the starred note below it —
 sum to `foreign_expenses` and are already counted in `total`. **Do not add
 them on top of it.**
 
-> **Renamed in v0.3.0.** This block was called `fees`, a name that said nothing
+> **Renamed in v0.7.0.** This block was called `fees`, a name that said nothing
 > about which charge it itemised and so invited exactly that double-count.
 
 ## Dividend-Specific Fields
@@ -363,6 +363,6 @@ value to put here, and `-include-metadata` fails with the conflicting depot
 numbers rather than writing one of them. Parse each depot separately, or drop
 the flag if you only want the transactions.
 
-> **Fixed in v0.3.0.** Previously the first file's depot was captured and
+> **Fixed in v0.7.0.** Previously the first file's depot was captured and
 > stamped over the entire batch, silently reattributing a second account's
 > transactions to the first holder.
