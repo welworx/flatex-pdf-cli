@@ -64,6 +64,7 @@ Key fields (most are `omitempty`):
 | `type` | `BUY` / `SELL` |
 | `date` | ISO `YYYY-MM-DD`. Trade date (Handelstag/Schlusstag/Buchtag) for trades, Valuta for dividends and interest — **not** the letter date printed at the top of the page |
 | `order_date`, `value_date` | Auftragsdatum / Valuta, ISO `YYYY-MM-DD` |
+| `execution_time` | Ausführungszeit as `"HH:MM"` — a bare local time, no date and no zone; the day is `date` |
 | `quantity`, `price` | numbers (decimals normalized); `price` is per unit, in EUR |
 | `gross_amount`, `gross_currency`, `net_amount`, `net_currency` | settlement amounts, the **same fields on every document type**: `gross_amount` is Kurswert on a trade and Bruttoausschüttung on a dividend, `net_amount` is always Endbetrag. `net_amount` is the only signed field — negative for a buy; `gross_amount`, `withholding_tax` and `costs` are unsigned, with the direction given by `type` |
 | `costs` | charge block — `provision`, `own_expenses`, `foreign_expenses`, `total`, and a `foreign_expenses_breakdown` itemisation of `foreign_expenses` (the document's `* Fremde Spesen` footnote). Absent when the document has no charge block; zeros inside it are real. Use `costs.total` as the transaction's cost — the breakdown entries are already part of it |
@@ -80,6 +81,13 @@ Key fields (most are `omitempty`):
   returned array by `document_type` as needed.
 - `ORDER` documents yield **one record per pending order**, so a single PDF can
   produce multiple array entries.
+- Amounts are emitted at the document's own precision (`110.000000`, `1540.00`,
+  `14`), so the raw JSON text is not byte-identical to a re-serialised
+  `json.loads`/`json.dumps` round trip. They are ordinary JSON numbers and
+  parse normally; only diff the parsed values, never the text.
+- `-include-metadata` **fails** when a batch spans more than one depot, since
+  one metadata block cannot describe two. Parse each depot separately, or drop
+  the flag if you only need the transactions.
 
 ## Known limitations
 

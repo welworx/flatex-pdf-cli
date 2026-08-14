@@ -14,9 +14,9 @@ type DocumentMetadata struct {
 // and collapsing them behind omitempty made a genuine "Provision: 0,00 EUR"
 // look like a parse failure.
 type Costs struct {
-	Provision       float64 `json:"provision"`        // Provision
-	OwnExpenses     float64 `json:"own_expenses"`     // Eigene Spesen
-	ForeignExpenses float64 `json:"foreign_expenses"` // Fremde Spesen
+	Provision       Decimal `json:"provision"`        // Provision
+	OwnExpenses     Decimal `json:"own_expenses"`     // Eigene Spesen
+	ForeignExpenses Decimal `json:"foreign_expenses"` // Fremde Spesen
 
 	// Unitemised is a charge the document does not print as a line item,
 	// recovered as the gap between the amount settled and the value of the
@@ -24,9 +24,11 @@ type Costs struct {
 	// (Betrag - charge) / Kurs shares and never names the charge. It is kept
 	// separate from the fields above because those carry a label the document
 	// actually printed, and this one does not: it is computed, not read.
-	Unitemised float64 `json:"unitemised,omitempty"`
+	// A pointer, unlike the printed charges above, because omitempty does not
+	// apply to a struct: only nil keeps it out of a settlement that has none.
+	Unitemised *Decimal `json:"unitemised,omitempty"`
 
-	Total float64 `json:"total"` // Provision + Eigene + Fremde Spesen + Unitemised
+	Total Decimal `json:"total"` // Provision + Eigene + Fremde Spesen + Unitemised
 
 	// ForeignExpensesBreakdown itemises ForeignExpenses and nothing else. The
 	// document marks the relationship with a footnote: the charge line reads
@@ -40,13 +42,13 @@ type Costs struct {
 
 // FeeBreakdown is the itemised breakdown of Costs.ForeignExpenses.
 type FeeBreakdown struct {
-	Courtage                float64 `json:"courtage"`
-	TradingFee              float64 `json:"trading_fee"`               // Tradinggebühr
-	Settlement              float64 `json:"settlement"`                // Regulierung
-	ClosingNotes            float64 `json:"closing_notes"`             // Schlussnoten
-	LSAllocation            float64 `json:"ls_allocation"`             // LS-Umlegung
-	FinancialTransactionTax float64 `json:"financial_transaction_tax"` // Finanztransaktionssteuer
-	Other                   float64 `json:"other"`                     // Sonstige
+	Courtage                Decimal `json:"courtage"`
+	TradingFee              Decimal `json:"trading_fee"`               // Tradinggebühr
+	Settlement              Decimal `json:"settlement"`                // Regulierung
+	ClosingNotes            Decimal `json:"closing_notes"`             // Schlussnoten
+	LSAllocation            Decimal `json:"ls_allocation"`             // LS-Umlegung
+	FinancialTransactionTax Decimal `json:"financial_transaction_tax"` // Finanztransaktionssteuer
+	Other                   Decimal `json:"other"`                     // Sonstige
 }
 
 // Transaction represents a single transaction (trade, dividend, interest, or thesaurierung).
@@ -72,6 +74,13 @@ type Transaction struct {
 	OrderDate string `json:"order_date,omitempty"` // Auftragsdatum — when the order was placed
 	ValueDate string `json:"value_date,omitempty"` // Valuta — when the cash settled
 
+	// ExecutionTime is the Ausführungszeit, as "HH:MM". The document prints it
+	// as a bare local time with no date and no zone ("13:56 Uhr"), so it is
+	// carried as one rather than folded into Date: the day it belongs to is
+	// Date, and inventing a zone to build a timestamp would state more than
+	// the statement does.
+	ExecutionTime string `json:"execution_time,omitempty"`
+
 	// Every amount and quantity below is a pointer, so a document printing
 	// "0,00" stays distinguishable from one that prints no such line at all.
 	// As plain float64 the two collapsed: omitempty dropped a genuine zero and
@@ -80,13 +89,13 @@ type Transaction struct {
 	// a zero. Same nil-means-absent convention as Costs below; read one with
 	// Amount where absent should behave as 0.
 	//
-	// ExchangeRate is deliberately NOT a pointer: no document states a
-	// Devisenkurs of 0,000000, and an absent one already means 1.0.
+	// They are Decimal rather than float64 so each keeps the precision its
+	// line was printed with — see the type's own comment.
 
 	// Position fields — what moved, and at what unit price.
 	Type     string   `json:"type,omitempty"` // BUY or SELL
-	Quantity *float64 `json:"quantity,omitempty"`
-	Price    *float64 `json:"price,omitempty"` // Kurs, always in EUR
+	Quantity *Decimal `json:"quantity,omitempty"`
+	Price    *Decimal `json:"price,omitempty"` // Kurs, always in EUR
 
 	// Settlement amounts. Every document that settles states a gross figure,
 	// deductions, and the Endbetrag that actually moved, so these are one set
@@ -105,15 +114,18 @@ type Transaction struct {
 	// NetAmount is signed by cash direction — negative when money left the
 	// account. GrossAmount, WithholdingTax and Costs are unsigned magnitudes;
 	// which way they apply follows from Type.
-	GrossAmount            *float64 `json:"gross_amount,omitempty"`   // Kurswert / Bruttoausschüttung
+	GrossAmount            *Decimal `json:"gross_amount,omitempty"`   // Kurswert / Bruttoausschüttung
 	GrossCurrency          string   `json:"gross_currency,omitempty"` // currency of GrossAmount
-	WithholdingTax         *float64 `json:"withholding_tax,omitempty"`
+	WithholdingTax         *Decimal `json:"withholding_tax,omitempty"`
 	WithholdingTaxCurrency string   `json:"withholding_tax_currency,omitempty"`
-	GainLoss               *float64 `json:"gain_loss,omitempty"`
-	ExchangeRate           float64  `json:"exchange_rate,omitempty"`
-	NetAmount              *float64 `json:"net_amount,omitempty"`   // Endbetrag
-	NetCurrency            string   `json:"net_currency,omitempty"` // currency of NetAmount
-	Costs                  *Costs   `json:"costs,omitempty"`
+	GainLoss               *Decimal `json:"gain_loss,omitempty"`
+	// ExchangeRate is 1 when the document prints no Devisenkurs. That default
+	// is a computed value, so it carries two places (1.00) where a stated rate
+	// carries the six the document prints (1.000000).
+	ExchangeRate *Decimal `json:"exchange_rate,omitempty"`
+	NetAmount    *Decimal `json:"net_amount,omitempty"`   // Endbetrag
+	NetCurrency  string   `json:"net_currency,omitempty"` // currency of NetAmount
+	Costs        *Costs   `json:"costs,omitempty"`
 
 	// Custody and execution
 	CustodyType    string `json:"custody_type,omitempty"`
@@ -122,21 +134,21 @@ type Transaction struct {
 	ExecutionVenue string `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
 	// ORDER fields (Sammelauftragsbestätigung — pending orders)
-	Limit      *float64 `json:"limit,omitempty"`       // Limit price
+	Limit      *Decimal `json:"limit,omitempty"`       // Limit price
 	ValidUntil string   `json:"valid_until,omitempty"` // Gültig bis
 
 	// DIVIDEND fields
-	DistributionPerShare *float64 `json:"distribution_per_share,omitempty"`
+	DistributionPerShare *Decimal `json:"distribution_per_share,omitempty"`
 	DistributionCurrency string   `json:"distribution_currency,omitempty"`
 	ExDate               string   `json:"ex_date,omitempty"`
 
 	// INTEREST fields
-	InterestRate *float64 `json:"interest_rate,omitempty"`
+	InterestRate *Decimal `json:"interest_rate,omitempty"`
 	PeriodFrom   string   `json:"period_from,omitempty"`
 	PeriodTo     string   `json:"period_to,omitempty"`
 
 	// ACCUMULATING fields
-	ReinvestmentPerShare *float64 `json:"reinvestment_per_share,omitempty"`
+	ReinvestmentPerShare *Decimal `json:"reinvestment_per_share,omitempty"`
 	ReinvestmentCurrency string   `json:"reinvestment_currency,omitempty"`
 	AccrualDate          string   `json:"accrual_date,omitempty"`
 }
@@ -144,11 +156,11 @@ type Transaction struct {
 // Amount returns the value p points at, or 0 when p is nil. Use it wherever an
 // absent optional amount should behave as zero (arithmetic, formatting) while
 // the field itself stays nil-means-absent for callers that care.
-func Amount(p *float64) float64 {
+func Amount(p *Decimal) float64 {
 	if p == nil {
 		return 0
 	}
-	return *p
+	return p.Float()
 }
 
 // TotalCosts returns the transaction's total charge, or 0 when the document
@@ -157,5 +169,5 @@ func (t *Transaction) TotalCosts() float64 {
 	if t.Costs == nil {
 		return 0
 	}
-	return t.Costs.Total
+	return t.Costs.Total.Float()
 }

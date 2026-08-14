@@ -52,7 +52,7 @@ flatex-pdf-cli ~/Downloads/statement.pdf
     "isin": "IE00B3RBWM25",
     "date": "2025-10-01",
     "quantity": 74.45,
-    "distribution_per_share": 0.422745,
+    "distribution_per_share": 0.4227450,
     "gross_amount": 31.47,
     "net_amount": 22.43,
     "net_currency": "EUR"
@@ -202,27 +202,28 @@ with depot metadata:
       "date": "2024-06-15",
       "order_date": "2024-06-13",
       "value_date": "2024-06-17",
+      "execution_time": "13:56",
       "type": "BUY",
-      "quantity": 10.0,
-      "price": 25.50,
+      "quantity": 10,
+      "price": 25.500000,
       "gross_amount": 255.00,
       "gross_currency": "EUR",
-      "exchange_rate": 1,
+      "exchange_rate": 1.000000,
       "net_amount": -263.50,
       "net_currency": "EUR",
       "costs": {
         "provision": 5.50,
-        "own_expenses": 0,
+        "own_expenses": 0.00,
         "foreign_expenses": 3.00,
         "total": 8.50,
         "foreign_expenses_breakdown": {
-          "courtage": 0,
+          "courtage": 0.00,
           "trading_fee": 0.50,
           "settlement": 2.50,
-          "closing_notes": 0,
-          "ls_allocation": 0,
-          "financial_transaction_tax": 0,
-          "other": 0
+          "closing_notes": 0.00,
+          "ls_allocation": 0.00,
+          "financial_transaction_tax": 0.00,
+          "other": 0.00
         }
       },
       "custody_type": "Wertpapierrechnung",
@@ -234,14 +235,22 @@ with depot metadata:
 }
 ```
 
-Four things worth knowing before you use the numbers:
+Five things worth knowing before you use the numbers:
 
+- **Numbers keep the document's own precision.** `Kurs : 110,000000 EUR`
+  emits as `110.000000` and `Ausgeführt : 14 St.` as `14`, because a price
+  quoted to six places is a different claim from one quoted to two. Figures
+  this tool derives rather than reads (`costs.total`, `costs.unitemised`, a
+  savings plan's `gross_amount`) carry at least two places. They are ordinary
+  JSON numbers throughout, so a consumer that does not care can ignore all of
+  this.
 - **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
   crypto and savings plans) — not the date printed at the top of the letter.
   `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
   alongside it, and on a real statement all three are usually different days.
-  Dividends and interest use `Valuta` as their `date`, since that is when the
-  money moves.
+  `execution_time` carries the `Ausführungszeit` as a bare `"HH:MM"` — the
+  document states no zone, so it is not folded into a timestamp. Dividends and
+  interest use `Valuta` as their `date`, since that is when the money moves.
 - **The settlement fields are the same on every document type.** A trade's
   `Kurswert` and a dividend's `Bruttoausschüttung` both land in `gross_amount`;
   `Endbetrag` always lands in `net_amount`, whichever document it came from.

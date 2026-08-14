@@ -3,7 +3,6 @@ package export
 import (
 	"encoding/csv"
 	"io"
-	"strconv"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
@@ -12,7 +11,7 @@ import (
 // order, as the generic CSV export's column headers.
 var csvHeader = []string{
 	"source", "order_number", "transaction_number", "document_type", "isin", "wkn",
-	"security_name", "date", "order_date", "value_date", "type", "quantity", "price",
+	"security_name", "date", "order_date", "value_date", "execution_time", "type", "quantity", "price",
 	"gross_amount", "gross_currency",
 	"provision", "own_expenses", "foreign_expenses", "unitemised", "total_costs",
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
@@ -39,14 +38,14 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	for _, t := range txns {
 		row := []string{
 			t.Source, t.OrderNumber, t.TransactionNumber, t.DocumentType, t.ISIN, t.WKN,
-			t.SecurityName, t.Date, t.OrderDate, t.ValueDate, t.Type,
+			t.SecurityName, t.Date, t.OrderDate, t.ValueDate, t.ExecutionTime, t.Type,
 			formatFloatPtr(t.Quantity), formatFloatPtr(t.Price),
 			formatFloatPtr(t.GrossAmount), t.GrossCurrency,
 		}
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
 			formatFloatPtr(t.WithholdingTax), t.WithholdingTaxCurrency,
-			formatFloatPtr(t.GainLoss), formatFloat(t.ExchangeRate),
+			formatFloatPtr(t.GainLoss), formatFloatPtr(t.ExchangeRate),
 			formatFloatPtr(t.NetAmount), t.NetCurrency,
 			t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
 			formatFloatPtr(t.Limit), t.ValidUntil,
@@ -70,27 +69,35 @@ func costColumns(c *schema.Costs) []string {
 	}
 	f := c.ForeignExpensesBreakdown
 	if f == nil {
-		f = &schema.FeeBreakdown{}
+		// Zero-filled as currency, so these cells read 0.00 like every other
+		// charge column rather than the bare 0 a zero-value Decimal renders.
+		z := schema.Computed(0, 0)
+		f = &schema.FeeBreakdown{
+			Courtage: z, TradingFee: z, Settlement: z, ClosingNotes: z,
+			LSAllocation: z, FinancialTransactionTax: z, Other: z,
+		}
 	}
 	return []string{
 		formatFloat(c.Provision), formatFloat(c.OwnExpenses),
-		formatFloat(c.ForeignExpenses), formatFloat(c.Unitemised), formatFloat(c.Total),
+		formatFloat(c.ForeignExpenses), formatFloatPtr(c.Unitemised), formatFloat(c.Total),
 		formatFloat(f.Courtage), formatFloat(f.TradingFee), formatFloat(f.Settlement),
 		formatFloat(f.ClosingNotes), formatFloat(f.LSAllocation),
 		formatFloat(f.FinancialTransactionTax), formatFloat(f.Other),
 	}
 }
 
-func formatFloat(f float64) string {
-	return strconv.FormatFloat(f, 'f', -1, 64)
+// formatFloat renders an amount at the precision the document printed it with,
+// so the CSV carries the same digits as the JSON.
+func formatFloat(d schema.Decimal) string {
+	return d.String()
 }
 
 // formatFloatPtr renders an optional amount, leaving the cell empty when the
 // document did not state one. Same convention costColumns uses for an absent
 // cost block, and it keeps a genuine 0 distinct from a missing value.
-func formatFloatPtr(p *float64) string {
+func formatFloatPtr(p *schema.Decimal) string {
 	if p == nil {
 		return ""
 	}
-	return formatFloat(*p)
+	return p.String()
 }

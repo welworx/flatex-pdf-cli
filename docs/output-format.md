@@ -18,14 +18,15 @@ All extracted transactions are returned as JSON objects with the following struc
   "date": "2024-06-15",
   "order_date": "2024-06-13",
   "value_date": "2024-06-17",
+  "execution_time": "13:56",
   "type": "BUY",
-  "quantity": 10.0,
-  "price": 25.50,
+  "quantity": 10,
+  "price": 25.500000,
   "gross_amount": 255.00,
   "gross_currency": "EUR",
   "withholding_tax": 0.00,
   "gain_loss": 0.00,
-  "exchange_rate": 1.0,
+  "exchange_rate": 1.000000,
   "net_amount": -263.50,
   "net_currency": "EUR",
   "costs": {
@@ -70,7 +71,7 @@ Every amount and quantity field — `quantity`, `price`, `gross_amount`,
 
 | The document… | JSON | CSV |
 |---|---|---|
-| prints `0,00` | `0` | `0` |
+| prints `0,00` | `0.00` | `0.00` |
 | prints no such line | field omitted | empty cell |
 
 These are different facts. A sale closed exactly at cost has a real gain of
@@ -80,8 +81,36 @@ parse failure, and it also disabled the internal cross-checks: a stated
 `Endbetrag: 0,00` used to be treated as "no Endbetrag" and silently skipped
 settlement validation. A stated zero is now validated like any other value.
 
-`exchange_rate` is the one exception: it is never absent, defaulting to `1.0`
-when the document prints no Devisenkurs.
+## Numbers keep the document's own precision
+
+Every amount is emitted with the number of decimal places the statement
+printed it with, not Go's shortest round-trip form:
+
+| The document prints | JSON |
+|---|---|
+| `Kurs : 110,000000 EUR` | `"price": 110.000000` |
+| `Kurswert : 1.540,00 EUR` | `"gross_amount": 1540.00` |
+| `Ausgeführt : 14 St.` | `"quantity": 14` |
+| `Provision : 5,90 EUR` | `"provision": 5.90` |
+
+The precision is information the statement is giving you. A price quoted to
+six places is not the same claim as one quoted to two, and a whole-share
+execution is not a quantity that merely happens to be round — marshalled as
+plain floats, `110,000000` and `14` both collapse and the distinction is gone.
+These are still ordinary JSON numbers (`1540.00` parses as `1540`), so a
+consumer that does not care about the digits does not have to do anything.
+
+Values this tool **derives** rather than reads have no printed precision to
+inherit, so they carry at least two places — the cent, the smallest unit these
+documents settle in. `costs.total`, `costs.unitemised`, a savings plan's
+`gross_amount`, and the `exchange_rate` of `1.00` supplied when a document
+prints no Devisenkurs are all in this group. A derived value whose inputs
+carried more places keeps the wider one.
+
+The Portfolio Performance export (`-format pp`) is deliberately exempt: it
+re-parses its columns and derives several of them, so it keeps shortest-form
+numbers. Padding there would round a fractional share count — `1.478695`
+shares is not `1.48`.
 
 ## Withholding tax (Austrian KESt)
 
@@ -116,7 +145,17 @@ different days:
 | `Graz, …` | Letter/print date — when the PDF was generated | *not extracted* |
 | `Auftragsdatum` | When the order was placed | `order_date` |
 | `Handelstag` (`Schlusstag` on crypto, `Buchtag` on savings plans) | When the trade executed | `date` |
+| `Ausführungszeit` | Time of day the trade executed | `execution_time` |
 | `Valuta` | When cash and securities settle | `value_date` |
+
+`execution_time` is `"HH:MM"`. The document prints a bare local time with no
+date and no zone (`Ausführungszeit    13:56 Uhr`), so it stays a time rather
+than being folded into `date`: the day is `date`, and picking a zone to build
+a timestamp would assert more than the statement does. Crypto settlements
+carry the same figure on their `Schlusstag` line (`29.01.2026, 16:00 Uhr`) and
+populate the field from there. `00:00` is passed through as printed — some
+confirmations really do state it — so treat it as the document's answer, not
+as a missing value.
 
 `date` is the **trade date**, because that is the date that fixes the price
 and the holding period, and it is the date Portfolio Performance expects in
@@ -173,6 +212,8 @@ meaningful, summing `gross_amount` across one is not.
 - `price` — Price per unit (Kurs), always in EUR
 - `order_date` — Auftragsdatum, when the order was placed
 - `value_date` — Valuta, when the trade settles
+- `execution_time` — Ausführungszeit as `"HH:MM"`; see
+  [Which date is `date`?](#which-date-is-date)
 - `custody_type` — Verwahrart, e.g. `Wertpapierrechnung`
 - `depositary` — Lagerstelle, e.g. `Clearstream Lux.`
 - `deposit_country` — Lagerland, translated to an ISO 3166-1 alpha-2 code

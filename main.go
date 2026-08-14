@@ -86,12 +86,13 @@ func main() {
 		// here that the document never printed, so show the arithmetic that
 		// produced them rather than only the result.
 		for _, t := range transactions {
-			if t.Costs == nil || t.Costs.Unitemised == 0 {
+			if t.Costs == nil || schema.Amount(t.Costs.Unitemised) == 0 {
 				continue
 			}
+			unitemised := schema.Amount(t.Costs.Unitemised)
 			fmt.Fprintf(os.Stderr, "%s %s %s: charge %.2f derived, %.2f settled less %.6f x %.2f in shares (not itemised by the document)\n",
-				t.DocumentType, t.Date, t.ISIN, t.Costs.Unitemised,
-				schema.Amount(t.GrossAmount)+t.Costs.Unitemised,
+				t.DocumentType, t.Date, t.ISIN, unitemised,
+				schema.Amount(t.GrossAmount)+unitemised,
 				schema.Amount(t.Quantity), schema.Amount(t.Price))
 		}
 	}

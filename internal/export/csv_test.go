@@ -59,8 +59,8 @@ func TestWriteCSVDistinguishesStatedZeroFromAbsent(t *testing.T) {
 	stated := render(t, &schema.Transaction{
 		DocumentType: "TRADE", ISIN: "X", Date: "2024-06-15", Quantity: amt(0),
 	})
-	if got := csvField(t, stated, "quantity"); got != "0" {
-		t.Errorf("a stated 0,00 quantity must render as \"0\", got %q", got)
+	if got := csvField(t, stated, "quantity"); got != "0.00" {
+		t.Errorf("a stated 0,00 quantity must render as \"0.00\", got %q", got)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestWriteCSVCostColumnsBlankWithoutCostBlock(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "DIVIDEND", ISIN: "X", Date: "2024-06-15"},
 		{DocumentType: "TRADE", ISIN: "Y", Date: "2024-06-15",
-			Costs: &schema.Costs{Provision: 0, ForeignExpenses: 3, Total: 3}},
+			Costs: &schema.Costs{Provision: schema.Num(0, 2), ForeignExpenses: schema.Num(3, 2), Total: schema.Num(3, 2)}},
 	}
 
 	var buf bytes.Buffer
@@ -87,11 +87,11 @@ func TestWriteCSVCostColumnsBlankWithoutCostBlock(t *testing.T) {
 		}
 	}
 	row := []string{lines[0], lines[2]}
-	if got := csvField(t, row, "provision"); got != "0" {
-		t.Errorf("charged nothing: expected provision \"0\", got %q", got)
+	if got := csvField(t, row, "provision"); got != "0.00" {
+		t.Errorf("charged nothing: expected provision \"0.00\", got %q", got)
 	}
-	if got := csvField(t, row, "total_costs"); got != "3" {
-		t.Errorf("expected total_costs \"3\", got %q", got)
+	if got := csvField(t, row, "total_costs"); got != "3.00" {
+		t.Errorf("expected total_costs \"3.00\", got %q", got)
 	}
 }
 

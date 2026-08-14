@@ -10,12 +10,12 @@ import (
 
 // amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
 // the same as leaving the field nil.
-func amt(v float64) *float64 { return &v }
+func amt(v float64) *schema.Decimal { d := schema.Num(v, 2); return &d }
 
 func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50), Costs: &schema.Costs{Provision: 5, Total: 5}},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossAmount: amt(60), Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50), Costs: &schema.Costs{Provision: schema.Num(5, 2), Total: schema.Num(5, 2)}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossAmount: amt(60), Costs: &schema.Costs{Provision: schema.Num(5, 2), Total: schema.Num(5, 2)}},
 		{DocumentType: "ORDER", ISIN: "IE000YU9K6K2", Date: "2024-06-17"}, // pending, must be skipped
 	}
 
@@ -38,7 +38,7 @@ func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 
 func TestWritePortfolioTransactionsUsesFinalAmountWhenPresent(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: amt(0.01), GrossAmount: amt(500), Costs: &schema.Costs{Provision: 10, Total: 10}, NetAmount: amt(-510)},
+		{DocumentType: "CRYPTO", SecurityName: "BITCOIN", Date: "2024-06-15", Type: "BUY", Quantity: amt(0.01), GrossAmount: amt(500), Costs: &schema.Costs{Provision: schema.Num(10, 2), Total: schema.Num(10, 2)}, NetAmount: amt(-510)},
 	}
 
 	var buf bytes.Buffer
@@ -158,8 +158,8 @@ func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 
 func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50), Costs: &schema.Costs{Provision: 5, Total: 5}},
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossAmount: amt(60), Costs: &schema.Costs{Provision: 5, Total: 5}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50), Costs: &schema.Costs{Provision: schema.Num(5, 2), Total: schema.Num(5, 2)}},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-16", Type: "SELL", Quantity: amt(1), GrossAmount: amt(60), Costs: &schema.Costs{Provision: schema.Num(5, 2), Total: schema.Num(5, 2)}},
 	}
 
 	var buf bytes.Buffer

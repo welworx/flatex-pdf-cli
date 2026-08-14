@@ -176,7 +176,7 @@ func checkWithholdingTax(t *schema.Transaction) error {
 	if t.GainLoss == nil || t.WithholdingTax == nil {
 		return nil
 	}
-	gain, tax := *t.GainLoss, *t.WithholdingTax
+	gain, tax := t.GainLoss.Float(), t.WithholdingTax.Float()
 	if gain <= 0 {
 		return nil
 	}
@@ -195,11 +195,11 @@ func checkWithholdingTax(t *schema.Transaction) error {
 // legitimately omits one of these figures is not this check's business, the
 // per-field extraction errors already cover values that are genuinely missing.
 // A stated 0,00 is a value and is checked.
-func checkProduct(name string, aP, bP, statedP *float64) error {
+func checkProduct(name string, aP, bP, statedP *schema.Decimal) error {
 	if aP == nil || bP == nil || statedP == nil {
 		return nil
 	}
-	a, b, stated := *aP, *bP, *statedP
+	a, b, stated := aP.Float(), bP.Float(), statedP.Float()
 	want := a * b
 	scale := math.Abs(want)
 	if scale == 0 {

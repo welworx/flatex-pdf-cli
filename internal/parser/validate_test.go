@@ -10,7 +10,7 @@ import (
 
 // amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
 // the same as leaving the field nil.
-func amt(v float64) *float64 { return &v }
+func amt(v float64) *schema.Decimal { d := schema.Num(v, 2); return &d }
 
 func TestValidateTransaction(t *testing.T) {
 	tests := []struct {
@@ -37,36 +37,36 @@ func TestValidateTransaction(t *testing.T) {
 			name: "crypto is not reconstructed from its coarse quantity",
 			// 0,014 St. printed to three decimals cannot reproduce the gross
 			// value closely enough to check; only the settlement line applies.
-			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), GrossCurrency: "EUR", GrossAmount: amt(1014.47), NetAmount: amt(-1019.54), Costs: &schema.Costs{Total: 5.07}},
+			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), GrossCurrency: "EUR", GrossAmount: amt(1014.47), NetAmount: amt(-1019.54), Costs: &schema.Costs{Total: schema.Num(5.07, 2)}},
 			wantErr: false,
 		},
 		{
 			name:    "crypto settlement does not add up",
-			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), GrossCurrency: "EUR", GrossAmount: amt(1014.47), NetAmount: amt(-1019.54), Costs: &schema.Costs{Total: 99.00}},
+			txn:     &schema.Transaction{DocumentType: "CRYPTO", Type: "BUY", Quantity: amt(0.014), Price: amt(72462.22), GrossCurrency: "EUR", GrossAmount: amt(1014.47), NetAmount: amt(-1019.54), Costs: &schema.Costs{Total: schema.Num(99.00, 2)}},
 			wantErr: true,
 		},
 		{
 			name:    "trade settlement adds up",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), GrossCurrency: "EUR", GrossAmount: amt(2034.20), NetAmount: amt(-2037.20), Costs: &schema.Costs{Total: 3.00}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), GrossCurrency: "EUR", GrossAmount: amt(2034.20), NetAmount: amt(-2037.20), Costs: &schema.Costs{Total: schema.Num(3.00, 2)}},
 			wantErr: false,
 		},
 		{
 			name: "sale settlement adds up",
 			// verkauf_sample_1's real figures: the deductions come off the
 			// proceeds rather than being added to them.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1507.08), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1507.08), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: schema.Num(8.41, 2)}},
 			wantErr: false,
 		},
 		{
 			name:    "sale settlement does not add up",
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1600.00), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1600.00), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: schema.Num(8.41, 2)}},
 			wantErr: true,
 		},
 		{
 			name: "sale deductions must not be added like a purchase",
 			// 1540.00 + 8.41 + 24.51 = 1572.92 is what a buy would settle at.
 			// This case fails if the sale ever reverts to the purchase sign.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1572.92), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: amt(14), Price: amt(110), GrossCurrency: "EUR", GrossAmount: amt(1540.00), NetAmount: amt(1572.92), WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: schema.Num(8.41, 2)}},
 			wantErr: true,
 		},
 		{
@@ -80,7 +80,7 @@ func TestValidateTransaction(t *testing.T) {
 			// The document printed "Endbetrag: 0,00 EUR", which cannot be right
 			// for a 2034.20 purchase. A plain float64 made this indistinguishable
 			// from "no Endbetrag" and the check was silently skipped.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), GrossCurrency: "EUR", GrossAmount: amt(2034.20), NetAmount: amt(0), Costs: &schema.Costs{Total: 3.00}},
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "BUY", Quantity: amt(35), Price: amt(58.12), GrossCurrency: "EUR", GrossAmount: amt(2034.20), NetAmount: amt(0), Costs: &schema.Costs{Total: schema.Num(3.00, 2)}},
 			wantErr: true,
 		},
 		{
@@ -187,16 +187,16 @@ func TestValidateFiresOnRealDocuments(t *testing.T) {
 		file    string
 		corrupt func(*schema.Transaction)
 	}{
-		{"trade_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
-		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
-		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
-		{"dividend_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
-		{"dividend_sample_2.pdf", func(x *schema.Transaction) { *x.GrossAmount *= 10 }},
+		{"trade_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount = schema.Num(x.GrossAmount.Float()*10, 2) }},
+		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.GrossAmount = schema.Num(x.GrossAmount.Float()*10, 2) }},
+		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount = schema.Num(x.GrossAmount.Float()*10, 2) }},
+		{"dividend_sample_1.pdf", func(x *schema.Transaction) { *x.GrossAmount = schema.Num(x.GrossAmount.Float()*10, 2) }},
+		{"dividend_sample_2.pdf", func(x *schema.Transaction) { *x.GrossAmount = schema.Num(x.GrossAmount.Float()*10, 2) }},
 		// The settlement identity is what covers crypto, so corrupt the
 		// settlement side directly to prove that path runs on a real document
 		// rather than riding on the gross-value check above.
-		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.NetAmount += 100 }},
-		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.NetAmount += 100 }},
+		{"krypto_sample_1.pdf", func(x *schema.Transaction) { *x.NetAmount = schema.Num(x.NetAmount.Float()+100, 2) }},
+		{"trade_sample_2.pdf", func(x *schema.Transaction) { *x.NetAmount = schema.Num(x.NetAmount.Float()+100, 2) }},
 	}
 
 	for _, tc := range tests {

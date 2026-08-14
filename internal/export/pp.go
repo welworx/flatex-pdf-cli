@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
@@ -79,7 +80,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			formatAmount(t.TotalCosts(), lang),
 			formatAmount(schema.Amount(t.WithholdingTax), lang),
 			t.GrossCurrency,
-			formatAmount(t.ExchangeRate, lang),
+			formatAmount(schema.Amount(t.ExchangeRate), lang),
 			note(t),
 		}
 		if err := cw.Write(row); err != nil {
@@ -101,7 +102,7 @@ func portfolioValue(t *schema.Transaction) float64 {
 	// Falls back only when the document states no Endbetrag at all. A stated
 	// 0,00 is the settlement amount, not a missing one.
 	if t.NetAmount != nil {
-		return math.Abs(*t.NetAmount)
+		return math.Abs(t.NetAmount.Float())
 	}
 	grossValue := schema.Amount(t.GrossAmount)
 	if t.Type == "SELL" {
@@ -185,11 +186,21 @@ func csvDelimiter(lang string) rune {
 // comma; PP's parser accepts a bare digit string with no thousands
 // separator, so no grouping is added.
 func formatAmount(f float64, lang string) string {
-	s := formatFloat(f)
+	s := ppFormat(f)
 	if lang == "de" {
 		s = strings.Replace(s, ".", ",", 1)
 	}
 	return s
+}
+
+// ppFormat renders a PP column value in shortest round-trip form. The CSV and
+// JSON exports carry each amount at the precision its document printed it
+// with, but PP is not that audience: it re-parses these columns and several of
+// them are derived here rather than read (see portfolioValue), so there is no
+// printed precision to honour. Padding them to the cent would also round a
+// fractional share count — 1.478695 shares is not 1.48.
+func ppFormat(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func note(t *schema.Transaction) string {

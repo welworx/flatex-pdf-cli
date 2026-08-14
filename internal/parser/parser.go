@@ -112,7 +112,9 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	// Extract exchange rate (optional, default to 1.0)
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
 	if err != nil {
-		exchangeRate = 1.0
+		// No Devisenkurs printed means a rate of 1 by definition — supplied
+		// here rather than read, so it carries the computed floor of 2 places.
+		exchangeRate = schema.Computed(1, 0)
 	}
 
 	// Extract WKN from ISIN/WKN pattern (e.g., "IE000YU9K6K2/A3DP9J")
@@ -150,6 +152,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		Date:              date,
 		OrderDate:         dateField(text, `Auftragsdatum`),
 		ValueDate:         dateField(text, `Valuta`),
+		ExecutionTime:     timeField(text, `Ausführungszeit`),
 		Type:              tradeType,
 		Quantity:          ptr(quantity),
 		Price:             ptr(price),
@@ -157,7 +160,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		GrossAmount:       ptr(grossValue),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
-		ExchangeRate:      exchangeRate,
+		ExchangeRate:      ptr(exchangeRate),
 		NetAmount:         finalAmount,
 		NetCurrency:       "EUR",
 		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
@@ -217,7 +220,9 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 
 	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
 	if err != nil {
-		exchangeRate = 1.0
+		// No Devisenkurs printed means a rate of 1 by definition — supplied
+		// here rather than read, so it carries the computed floor of 2 places.
+		exchangeRate = schema.Computed(1, 0)
 	}
 
 	return &schema.Transaction{
@@ -226,20 +231,23 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		DocumentType:      "CRYPTO",
 		SecurityName:      name,
 		Date:              date,
-		Type:              tradeType,
-		Quantity:          ptr(quantity),
-		Price:             ptr(price),
-		GrossCurrency:     "EUR",
-		GrossAmount:       ptr(grossValue),
-		Costs:             extractCosts(text),
-		WithholdingTax:    withholdingTax,
-		GainLoss:          gainLoss,
-		ExchangeRate:      exchangeRate,
-		NetAmount:         finalAmount,
-		NetCurrency:       "EUR",
-		CustodyType:       extractString(text, `Verwahrart:\s*([^\n*]+)`),
-		Depositary:        extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
-		ValueDate:         convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
+		// Crypto has no Ausführungszeit line; the time rides on Schlusstag
+		// ("Schlusstag: 29.01.2026, 16:00 Uhr").
+		ExecutionTime:  extractString(text, `Schlusstag:\s*\d{2}\.\d{2}\.\d{4},\s*(\d{2}:\d{2})`),
+		Type:           tradeType,
+		Quantity:       ptr(quantity),
+		Price:          ptr(price),
+		GrossCurrency:  "EUR",
+		GrossAmount:    ptr(grossValue),
+		Costs:          extractCosts(text),
+		WithholdingTax: withholdingTax,
+		GainLoss:       gainLoss,
+		ExchangeRate:   ptr(exchangeRate),
+		NetAmount:      finalAmount,
+		NetCurrency:    "EUR",
+		CustodyType:    extractString(text, `Verwahrart:\s*([^\n*]+)`),
+		Depositary:     extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
+		ValueDate:      convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
 	}, nil
 }
 
@@ -366,7 +374,9 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	// Extract exchange rate (optional, default to 1.0)
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`)
 	if err != nil {
-		exchangeRate = 1.0
+		// No Devisenkurs printed means a rate of 1 by definition — supplied
+		// here rather than read, so it carries the computed floor of 2 places.
+		exchangeRate = schema.Computed(1, 0)
 	}
 
 	// Extract WKN from ISIN/WKN pattern
@@ -389,7 +399,7 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		WithholdingTaxCurrency: withholdingTaxCurrency,
 		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
-		ExchangeRate:           exchangeRate,
+		ExchangeRate:           ptr(exchangeRate),
 		ExDate:                 exDate,
 		ValueDate:              valueDate,
 	}
@@ -558,7 +568,9 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 	// Extract exchange rate (optional, default to 1.0)
 	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
 	if err != nil {
-		exchangeRate = 1.0
+		// No Devisenkurs printed means a rate of 1 by definition — supplied
+		// here rather than read, so it carries the computed floor of 2 places.
+		exchangeRate = schema.Computed(1, 0)
 	}
 
 	// Extract WKN from ISIN/WKN pattern
@@ -579,7 +591,7 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		ExchangeRate:           exchangeRate,
+		ExchangeRate:           ptr(exchangeRate),
 		ExDate:                 exDate,
 		ValueDate:              valueDate,
 		AccrualDate:            accrualDate,
@@ -625,15 +637,15 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		// (Kurswert, shares only) instead of silently folding a fee into the
 		// purchase price.
 		settled := mustFloat(m[6])
-		shareValue := roundCents(quantity * price)
-		charge, err := unitemisedCharge(tradeType, settled, shareValue)
+		shareValue := roundCents(quantity.Float() * price.Float())
+		charge, err := unitemisedCharge(tradeType, settled.Float(), shareValue)
 		if err != nil {
 			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
 		}
 
 		// Buys move cash out, sales move it in, matching NetAmount's sign
 		// convention on trade confirmations.
-		finalAmount := -settled
+		finalAmount := schema.Num(-settled.Float(), settled.Scale())
 		if tradeType == "SELL" {
 			finalAmount = settled
 		}
@@ -650,14 +662,25 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			Quantity:      ptr(quantity),
 			Price:         ptr(price),
 			GrossCurrency: "EUR",
-			GrossAmount:   ptr(shareValue),
-			Costs:         &schema.Costs{Unitemised: charge, Total: charge},
-			NetAmount:     ptr(finalAmount),
-			NetCurrency:   "EUR",
+			// Both are worked out here rather than printed: the row states
+			// only Stücke, Kurs and Betrag.
+			GrossAmount: computed(shareValue, settled.Scale()),
+			// The row prints no Provision or Spesen line at all, so those stay
+			// at nothing — spelled 0.00 like every other currency figure
+			// rather than the bare 0 a zero-value Decimal renders.
+			Costs: &schema.Costs{
+				Provision:       schema.Computed(0, 0),
+				OwnExpenses:     schema.Computed(0, 0),
+				ForeignExpenses: schema.Computed(0, 0),
+				Unitemised:      computed(charge, settled.Scale()),
+				Total:           schema.Computed(charge, settled.Scale()),
+			},
+			NetAmount:   ptr(finalAmount),
+			NetCurrency: "EUR",
 			// Savings-plan rows are settled in EUR and carry no Devisenkurs
-			// line; without an explicit 1.0 the PP export writes an exchange
+			// line; without an explicit 1 the PP export writes an exchange
 			// rate of 0.
-			ExchangeRate: 1.0,
+			ExchangeRate: computed(1, 0),
 		})
 	}
 
@@ -678,23 +701,39 @@ func dateField(text, label string) string {
 	return convertGermanDate(extractString(text, label+hSpace+`:?`+hSpace+`(\d{2}\.\d{2}\.\d{4})`))
 }
 
+// timeField reads a "<label> [:] HH:MM Uhr" header field. The separating
+// whitespace is optional because gxpdf runs the label into its value column on
+// some layouts ("Ausführungszeit09:15 Uhr").
+func timeField(text, label string) string {
+	return extractString(text, label+hSpace+`:?`+hSpace+`(\d{2}:\d{2})`+hSpace+`Uhr`)
+}
+
 // eurField reads a "<label> [:] <amount> EUR" money line.
-func eurField(text, label string) (float64, error) {
+func eurField(text, label string) (schema.Decimal, error) {
 	return extractFloat(text, label+hSpace+`:?`+hSpace+`(-?[\d.,]+)`+hSpace+`EUR`)
 }
 
 // ptr boxes an amount the parser has already established is present, for the
 // fields whose extraction fails the whole parse when the label is missing.
-func ptr(v float64) *float64 { return &v }
+func ptr(v schema.Decimal) *schema.Decimal { return &v }
 
 // floatPtr adapts an (value, error) extraction pair to the nil-means-absent
 // convention: nil when the label was not found, otherwise a pointer to the
 // value — including a genuine 0,00.
-func floatPtr(v float64, err error) *float64 {
+func floatPtr(v schema.Decimal, err error) *schema.Decimal {
 	if err != nil {
 		return nil
 	}
 	return &v
+}
+
+// computed boxes an amount this package worked out rather than read off the
+// document, floored at two decimal places. scaleOf reports the precision of
+// the inputs it was derived from, so a figure computed from six-place inputs
+// keeps six.
+func computed(v float64, scale int) *schema.Decimal {
+	d := schema.Computed(v, scale)
+	return &d
 }
 
 // firstNonEmpty returns the first non-empty argument, or "".
@@ -716,14 +755,18 @@ func extractCosts(text string) *schema.Costs {
 	if err != nil {
 		return nil
 	}
-	own, _ := eurField(text, `Eigene[^\S\n]*Spesen`)
-	foreign, _ := eurField(text, `Fremde[^\S\n]*Spesen`)
+	own := feeLine(text, `Eigene[^\S\n]*Spesen`)
+	foreign := feeLine(text, `Fremde[^\S\n]*Spesen`)
 
+	// Total is the one figure here the document does not print, so it takes
+	// the computed floor of two places, widened if any charge it sums was
+	// printed with more.
+	total := provision.Float() + own.Float() + foreign.Float()
 	c := &schema.Costs{
 		Provision:       provision,
 		OwnExpenses:     own,
 		ForeignExpenses: foreign,
-		Total:           provision + own + foreign,
+		Total:           schema.Computed(total, maxScale(provision, own, foreign)),
 	}
 
 	// The itemised lines are only meaningful under their "Enthalten sind
@@ -743,32 +786,54 @@ func extractCosts(text string) *schema.Costs {
 	return c
 }
 
-func feeLine(text, label string) float64 {
-	f, _ := eurField(text, label)
+// feeLine reads one line of the Gebühren itemisation. A line the block omits
+// is a charge of nothing, reported as the 0.00 every other currency figure
+// here carries rather than a bare 0 — the zero Decimal has no scale.
+func feeLine(text, label string) schema.Decimal {
+	f, err := eurField(text, label)
+	if err != nil {
+		return schema.Computed(0, 0)
+	}
 	return f
 }
 
-// extractFloat extracts a float from text using a regex pattern.
-// Handles European decimal format (comma as decimal separator).
-func extractFloat(text, pattern string) (float64, error) {
+// maxScale returns the widest printed precision among the given amounts, so a
+// figure derived from them is not rendered to fewer places than its inputs.
+func maxScale(ds ...schema.Decimal) int {
+	max := 0
+	for _, d := range ds {
+		if d.Scale() > max {
+			max = d.Scale()
+		}
+	}
+	return max
+}
+
+// extractFloat extracts a number from text using a regex pattern, keeping the
+// number of decimal places the document printed it with. Handles European
+// decimal format (comma as decimal separator).
+func extractFloat(text, pattern string) (schema.Decimal, error) {
 	regex := regexp.MustCompile(pattern)
 	matches := regex.FindStringSubmatch(text)
 	if len(matches) < 2 {
-		return 0, fmt.Errorf("pattern not found: %s", pattern)
+		return schema.Decimal{}, fmt.Errorf("pattern not found: %s", pattern)
 	}
 
-	f, err := strconv.ParseFloat(normalizeDecimal(matches[1]), 64)
+	normalized := normalizeDecimal(matches[1])
+	f, err := strconv.ParseFloat(normalized, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse float from '%s': %w", matches[1], err)
+		return schema.Decimal{}, fmt.Errorf("failed to parse float from '%s': %w", matches[1], err)
 	}
 
-	return f, nil
+	return schema.Num(f, schema.ScaleOf(normalized)), nil
 }
 
 // mustFloat parses a German/English-formatted number, returning 0 on failure.
-func mustFloat(s string) float64 {
-	f, _ := strconv.ParseFloat(normalizeDecimal(s), 64)
-	return f
+// It too keeps the printed precision.
+func mustFloat(s string) schema.Decimal {
+	normalized := normalizeDecimal(s)
+	f, _ := strconv.ParseFloat(normalized, 64)
+	return schema.Num(f, schema.ScaleOf(normalized))
 }
 
 // convertGermanDate converts "DD.MM.YYYY" to "YYYY-MM-DD" (empty if not 3 parts).

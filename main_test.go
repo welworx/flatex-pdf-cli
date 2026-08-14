@@ -13,7 +13,7 @@ import (
 
 // amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
 // the same as leaving the field nil.
-func amt(v float64) *float64 { return &v }
+func amt(v float64) *schema.Decimal { d := schema.Num(v, 2); return &d }
 
 // TestProcessPDFsContinuesPastFailures verifies that a single unparseable file
 // does not abort the whole batch: good files are still processed and each
@@ -247,7 +247,7 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 		Date: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
 		Quantity: amt(1.5), Price: amt(47.235), GrossCurrency: "EUR", GrossAmount: amt(50.01),
 		NetAmount: amt(-56), NetCurrency: "EUR", DepositCountry: "GB",
-		Costs: &schema.Costs{Provision: 5.99, Total: 5.99},
+		Costs: &schema.Costs{Provision: schema.Num(5.99, 2), Total: schema.Num(5.99, 2)},
 	}}
 
 	if err := writeOutput("json", out, "en", txns, nil, false); err != nil {
