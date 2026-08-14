@@ -16,7 +16,7 @@ func TestWriteCSVHeaderAndRow(t *testing.T) {
 			Date:         "2024-06-15",
 			Type:         "BUY",
 			Quantity:     amt(1.5),
-			GrossValue:   amt(50.01),
+			GrossAmount:  amt(50.01),
 		},
 	}
 

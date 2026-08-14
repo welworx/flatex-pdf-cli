@@ -162,11 +162,11 @@ func TestParseTradeBuy(t *testing.T) {
 	if schema.Amount(tx.Price) != 47.235 {
 		t.Errorf("expected Price=47.235, got %f", schema.Amount(tx.Price))
 	}
-	if tx.PriceCurrency != "EUR" {
-		t.Errorf("expected PriceCurrency=EUR, got %s", tx.PriceCurrency)
+	if tx.GrossCurrency != "EUR" {
+		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
 	}
-	if schema.Amount(tx.GrossValue) != 50.00 {
-		t.Errorf("expected GrossValue=50.00, got %f", schema.Amount(tx.GrossValue))
+	if schema.Amount(tx.GrossAmount) != 50.00 {
+		t.Errorf("expected GrossAmount=50.00, got %f", schema.Amount(tx.GrossAmount))
 	}
 	if tx.Costs == nil {
 		t.Fatal("expected a cost block, got nil")
@@ -242,10 +242,10 @@ func TestParseCrypto(t *testing.T) {
 		{"TransactionNumber", tx.TransactionNumber, "4400000044"},
 		{"Quantity", schema.Amount(tx.Quantity), 0.014},
 		{"Price", schema.Amount(tx.Price), 72462.22},
-		{"GrossValue", schema.Amount(tx.GrossValue), 1014.47},
+		{"GrossAmount", schema.Amount(tx.GrossAmount), 1014.47},
 		{"Provision", tx.Costs.Provision, 5.07},
 		{"TotalCosts", tx.TotalCosts(), 5.07},
-		{"FinalAmount", schema.Amount(tx.FinalAmount), -1019.54},
+		{"NetAmount", schema.Amount(tx.NetAmount), -1019.54},
 		{"Date", tx.Date, "2026-01-29"},
 		{"ValueDate", tx.ValueDate, "2026-01-30"},
 		{"CustodyType", tx.CustodyType, "Kryptoverwahrung"},
@@ -596,14 +596,14 @@ func TestParseSavingsPlan(t *testing.T) {
 	if schema.Amount(a.Price) != 134.24 {
 		t.Errorf("Price = %f, want 134.24", schema.Amount(a.Price))
 	}
-	if a.PriceCurrency != "EUR" {
-		t.Errorf("PriceCurrency = %q, want EUR", a.PriceCurrency)
+	if a.GrossCurrency != "EUR" {
+		t.Errorf("GrossCurrency = %q, want EUR", a.GrossCurrency)
 	}
-	// GrossValue is the value of the shares (Stücke x Kurs), not the Betrag
+	// GrossAmount is the value of the shares (Stücke x Kurs), not the Betrag
 	// column: the 200.00 settled buys 198.50 worth of shares, and the 1.50
 	// difference is a charge the Sammelabrechnung never prints as a line item.
-	if schema.Amount(a.GrossValue) != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", schema.Amount(a.GrossValue))
+	if schema.Amount(a.GrossAmount) != 198.50 {
+		t.Errorf("GrossAmount = %f, want 198.50", schema.Amount(a.GrossAmount))
 	}
 	if a.Costs == nil {
 		t.Fatal("Costs = nil, want the derived charge")
@@ -614,9 +614,9 @@ func TestParseSavingsPlan(t *testing.T) {
 	if a.Costs.Total != 1.50 {
 		t.Errorf("Costs.Total = %f, want 1.50", a.Costs.Total)
 	}
-	// Buys move cash out, matching FinalAmount on a trade confirmation.
-	if schema.Amount(a.FinalAmount) != -200.00 {
-		t.Errorf("FinalAmount = %f, want -200.00", schema.Amount(a.FinalAmount))
+	// Buys move cash out, matching NetAmount on a trade confirmation.
+	if schema.Amount(a.NetAmount) != -200.00 {
+		t.Errorf("NetAmount = %f, want -200.00", schema.Amount(a.NetAmount))
 	}
 
 	b := txs[1]
@@ -628,14 +628,14 @@ func TestParseSavingsPlan(t *testing.T) {
 	}
 	// 1,436948 x 138,14 is 198.50, exactly what this row settled, so there is
 	// no gap and no charge to recover.
-	if schema.Amount(b.GrossValue) != 198.50 {
-		t.Errorf("GrossValue = %f, want 198.50", schema.Amount(b.GrossValue))
+	if schema.Amount(b.GrossAmount) != 198.50 {
+		t.Errorf("GrossAmount = %f, want 198.50", schema.Amount(b.GrossAmount))
 	}
 	if b.Costs.Unitemised != 0 {
 		t.Errorf("Costs.Unitemised = %f, want 0", b.Costs.Unitemised)
 	}
-	if schema.Amount(b.FinalAmount) != 198.50 {
-		t.Errorf("FinalAmount = %f, want 198.50", schema.Amount(b.FinalAmount))
+	if schema.Amount(b.NetAmount) != 198.50 {
+		t.Errorf("NetAmount = %f, want 198.50", schema.Amount(b.NetAmount))
 	}
 }
 
@@ -1102,7 +1102,7 @@ func TestParseTradeCosts(t *testing.T) {
 	if tx.Costs == nil {
 		t.Fatal("expected a cost block, got nil")
 	}
-	if tx.Costs.Fees == nil {
+	if tx.Costs.ForeignExpensesBreakdown == nil {
 		t.Fatal("expected an itemised Gebühren breakdown, got nil")
 	}
 	checks := []struct {
@@ -1114,11 +1114,11 @@ func TestParseTradeCosts(t *testing.T) {
 		{"Eigene Spesen", tx.Costs.OwnExpenses, 0.90},
 		{"Fremde Spesen", tx.Costs.ForeignExpenses, 3.00},
 		{"total", tx.Costs.Total, 5.40},
-		{"Tradinggebühr", tx.Costs.Fees.TradingFee, 0.50},
-		{"Regulierung", tx.Costs.Fees.Settlement, 2.50},
-		{"Courtage", tx.Costs.Fees.Courtage, 0.00},
+		{"Tradinggebühr", tx.Costs.ForeignExpensesBreakdown.TradingFee, 0.50},
+		{"Regulierung", tx.Costs.ForeignExpensesBreakdown.Settlement, 2.50},
+		{"Courtage", tx.Costs.ForeignExpensesBreakdown.Courtage, 0.00},
 		{"Einbeh. KESt", schema.Amount(tx.WithholdingTax), 0.25},
-		{"Endbetrag", schema.Amount(tx.FinalAmount), -2039.85},
+		{"Endbetrag", schema.Amount(tx.NetAmount), -2039.85},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -1126,9 +1126,9 @@ func TestParseTradeCosts(t *testing.T) {
 		}
 	}
 	// The breakdown itemises Fremde Spesen; double-counting it would give 8.40.
-	sum := tx.Costs.Fees.Courtage + tx.Costs.Fees.TradingFee + tx.Costs.Fees.Settlement +
-		tx.Costs.Fees.ClosingNotes + tx.Costs.Fees.LSAllocation +
-		tx.Costs.Fees.FinancialTransactionTax + tx.Costs.Fees.Other
+	sum := tx.Costs.ForeignExpensesBreakdown.Courtage + tx.Costs.ForeignExpensesBreakdown.TradingFee + tx.Costs.ForeignExpensesBreakdown.Settlement +
+		tx.Costs.ForeignExpensesBreakdown.ClosingNotes + tx.Costs.ForeignExpensesBreakdown.LSAllocation +
+		tx.Costs.ForeignExpensesBreakdown.FinancialTransactionTax + tx.Costs.ForeignExpensesBreakdown.Other
 	if sum != tx.Costs.ForeignExpenses {
 		t.Errorf("Gebühren sum to %v, want Fremde Spesen %v", sum, tx.Costs.ForeignExpenses)
 	}
@@ -1148,8 +1148,8 @@ func TestParseCostsAbsentBlockIsNil(t *testing.T) {
 	if c.Total != 0 {
 		t.Errorf("total = %v, want 0", c.Total)
 	}
-	if c.Fees != nil {
-		t.Errorf("expected no Gebühren breakdown without its heading, got %+v", c.Fees)
+	if c.ForeignExpensesBreakdown != nil {
+		t.Errorf("expected no Gebühren breakdown without its heading, got %+v", c.ForeignExpensesBreakdown)
 	}
 }
 

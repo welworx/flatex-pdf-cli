@@ -25,7 +25,7 @@ func TestProcessPDFsContinuesPastFailures(t *testing.T) {
 		"testdata/dividend_sample_1.pdf", // good
 	}
 
-	txns, _, errs := processPDFs(files, false)
+	txns, _, errs, _ := processPDFs(files, false)
 
 	if len(txns) != 2 {
 		t.Errorf("expected 2 transactions from the good files, got %d", len(txns))
@@ -71,7 +71,7 @@ func TestDiscoverPDFsFindsAndSortsRecursively(t *testing.T) {
 func TestWriteOutputCSVFormat(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("csv", out, "en", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)
@@ -96,7 +96,7 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
 	txns := []*schema.Transaction{
-		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)},
+		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)},
 		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: amt(10)},
 	}
 
@@ -115,7 +115,7 @@ func TestWriteOutputPPFormatWritesTwoFiles(t *testing.T) {
 func TestWriteOutputPPFormatRejectsUnknownLangWithoutWritingFiles(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "fr", txns, nil, false); err == nil {
 		t.Fatal("expected error for unknown lang")
@@ -165,7 +165,7 @@ func captureStdout(t *testing.T, fn func()) string {
 func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789"}
 
 	// Metadata is passed but includeMetadata is false: it must not leak out.
@@ -192,7 +192,7 @@ func TestWriteOutputJSONEmitsBareArrayWithoutMetadataFlag(t *testing.T) {
 func TestWriteOutputJSONWithMetadataWrapsTransactions(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.json")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 	meta := &schema.DocumentMetadata{DepotNumber: "123456789", DepotHolder: "Max Mustermann"}
 
 	if err := writeOutput("json", out, "en", txns, meta, true); err != nil {
@@ -245,8 +245,8 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 	txns := []*schema.Transaction{{
 		DocumentType: "TRADE", ISIN: "IE000YU9K6K2", WKN: "A3DP9J",
 		Date: "2024-06-15", OrderDate: "2024-06-14", Type: "BUY",
-		Quantity: amt(1.5), Price: amt(47.235), PriceCurrency: "EUR", GrossValue: amt(50.01),
-		FinalAmount: amt(-56), FinalCurrency: "EUR", DepositCountry: "GB",
+		Quantity: amt(1.5), Price: amt(47.235), GrossCurrency: "EUR", GrossAmount: amt(50.01),
+		NetAmount: amt(-56), NetCurrency: "EUR", DepositCountry: "GB",
 		Costs: &schema.Costs{Provision: 5.99, Total: 5.99},
 	}}
 
@@ -268,11 +268,20 @@ func TestWriteOutputJSONPinsWireFieldNames(t *testing.T) {
 
 	for _, key := range []string{
 		"document_type", "isin", "wkn", "date", "order_date", "type",
-		"quantity", "price", "price_currency", "gross_value",
-		"final_amount", "final_currency", "deposit_country", "costs",
+		"quantity", "price", "gross_amount", "gross_currency",
+		"net_amount", "net_currency", "deposit_country", "costs",
 	} {
 		if _, ok := got[0][key]; !ok {
 			t.Errorf("JSON is missing the %q key: %s", key, data)
+		}
+	}
+
+	// The names a trade used to settle under. A dividend already spelled the
+	// same three quantities gross_amount/net_amount/gross_currency, so these
+	// four were the duplicate half of each pair and must not come back.
+	for _, key := range []string{"price_currency", "gross_value", "final_amount", "final_currency"} {
+		if _, ok := got[0][key]; ok {
+			t.Errorf("JSON still carries the retired %q key: %s", key, data)
 		}
 	}
 
@@ -318,7 +327,7 @@ func TestWriteToReportsErrorForUncreatablePath(t *testing.T) {
 func TestProcessPDFsIncludeSourceStampsFilename(t *testing.T) {
 	files := []string{"testdata/trade_sample_1.pdf"}
 
-	with, _, errs := processPDFs(files, true)
+	with, _, errs, _ := processPDFs(files, true)
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -329,14 +338,14 @@ func TestProcessPDFsIncludeSourceStampsFilename(t *testing.T) {
 		t.Errorf("expected source trade_sample_1.pdf, got %q", with[0].Source)
 	}
 
-	without, _, _ := processPDFs(files, false)
+	without, _, _, _ := processPDFs(files, false)
 	if without[0].Source != "" {
 		t.Errorf("expected empty source without the flag, got %q", without[0].Source)
 	}
 }
 
 func TestProcessPDFsCapturesDepotMetadata(t *testing.T) {
-	_, meta, errs := processPDFs([]string{"testdata/trade_sample_1.pdf"}, false)
+	_, meta, errs, _ := processPDFs([]string{"testdata/trade_sample_1.pdf"}, false)
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
@@ -348,6 +357,50 @@ func TestProcessPDFsCapturesDepotMetadata(t *testing.T) {
 	}
 	if meta.DepotHolder != "Mustermann, Max" {
 		t.Errorf("DepotHolder = %q, want %q", meta.DepotHolder, "Mustermann, Max")
+	}
+}
+
+// Two depots in one batch used to yield the first file's holder stamped over
+// every transaction, silently reattributing the second account's trades. The
+// transactions are still worth having; the metadata block is not.
+func TestProcessPDFsRefusesMetadataAcrossDepots(t *testing.T) {
+	files := []string{"testdata/trade_sample_1.pdf", "testdata/verkauf_sample_1.pdf"}
+
+	txns, meta, errs, metaErr := processPDFs(files, false)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected per-file errors: %v", errs)
+	}
+	if len(txns) != 2 {
+		t.Errorf("expected both files' transactions, got %d", len(txns))
+	}
+	if meta != nil {
+		t.Errorf("expected no metadata for a mixed-depot batch, got %+v", meta)
+	}
+	if metaErr == nil {
+		t.Fatal("expected an error naming the conflicting depots")
+	}
+	for _, want := range []string{"11000000011", "99000000091"} {
+		if !strings.Contains(metaErr.Error(), want) {
+			t.Errorf("error %q does not name depot %s", metaErr, want)
+		}
+	}
+}
+
+// The conflict must not fire on a batch that genuinely shares one depot. Each
+// fixture was redacted with its own depot number, so the same file twice is
+// the only way to build a multi-file single-depot batch out of them.
+func TestProcessPDFsKeepsMetadataForOneDepot(t *testing.T) {
+	files := []string{"testdata/trade_sample_1.pdf", "testdata/trade_sample_1.pdf"}
+
+	_, meta, errs, metaErr := processPDFs(files, false)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected per-file errors: %v", errs)
+	}
+	if metaErr != nil {
+		t.Fatalf("unexpected depot conflict: %v", metaErr)
+	}
+	if meta == nil || meta.DepotNumber != "11000000011" {
+		t.Errorf("expected depot 11000000011 to survive the batch, got %+v", meta)
 	}
 }
 
@@ -393,7 +446,7 @@ func TestDiscoverPDFsMissingPathIsAnError(t *testing.T) {
 // reported rather than swallowed on the way to writing the second.
 func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "no-such-dir", "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "en", txns, nil, false); err == nil {
 		t.Fatal("expected an error writing into a nonexistent directory")
@@ -403,7 +456,7 @@ func TestWriteOutputPPFormatReportsUnwritablePath(t *testing.T) {
 func TestWriteOutputPPFormatGermanLang(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.csv")
-	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossValue: amt(50)}}
+	txns := []*schema.Transaction{{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50)}}
 
 	if err := writeOutput("pp", out, "de", txns, nil, false); err != nil {
 		t.Fatalf("writeOutput failed: %v", err)

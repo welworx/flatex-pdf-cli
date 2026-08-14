@@ -91,8 +91,8 @@ func validateTransaction(t *schema.Transaction) error {
 		// Kurs is only ever extracted in EUR. When Kurswert carries a foreign
 		// currency the two are related by Devisenkurs rather than directly, so
 		// the identity does not apply.
-		if t.PriceCurrency == "EUR" {
-			if err := checkProduct("gross value", t.Quantity, t.Price, t.GrossValue); err != nil {
+		if t.GrossCurrency == "EUR" {
+			if err := checkProduct("gross value", t.Quantity, t.Price, t.GrossAmount); err != nil {
 				return err
 			}
 		}
@@ -141,10 +141,10 @@ func checkSettlement(t *schema.Transaction) error {
 	// Skipped only when the document states no such figure. A stated 0,00 is
 	// checked like any other value: it used to disable this check silently,
 	// which let an impossible settlement through.
-	if (t.Type != "BUY" && t.Type != "SELL") || t.FinalAmount == nil || t.GrossValue == nil {
+	if (t.Type != "BUY" && t.Type != "SELL") || t.NetAmount == nil || t.GrossAmount == nil {
 		return nil
 	}
-	grossValue := schema.Amount(t.GrossValue)
+	grossValue := schema.Amount(t.GrossAmount)
 	// A purchase adds the deductions to what you pay; a sale subtracts them
 	// from what you receive. Confirmed against verkauf_sample_1: gross 1540.00
 	// less costs 8.41 less KESt 24.51 equals the stated Endbetrag of 1507.08.
@@ -155,7 +155,7 @@ func checkSettlement(t *schema.Transaction) error {
 		sign, verb = -1.0, "less"
 	}
 	want := grossValue + sign*(t.TotalCosts()+tax)
-	got := math.Abs(schema.Amount(t.FinalAmount))
+	got := math.Abs(schema.Amount(t.NetAmount))
 	if math.Abs(want-got) <= absTolerance {
 		return nil
 	}

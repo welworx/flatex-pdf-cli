@@ -78,7 +78,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			t.SecurityName,
 			formatAmount(t.TotalCosts(), lang),
 			formatAmount(schema.Amount(t.WithholdingTax), lang),
-			t.PriceCurrency,
+			t.GrossCurrency,
 			formatAmount(t.ExchangeRate, lang),
 			note(t),
 		}
@@ -92,7 +92,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 
 // portfolioValue computes PP's "Value" column: the total cash movement of a
 // buy/sell. TRADE and CRYPTO carry flatex's own computed settlement amount
-// (Endbetrag/FinalAmount), which is signed by cash direction — negative for a
+// (Endbetrag/NetAmount), which is signed by cash direction — negative for a
 // buy. PP wants the magnitude, with Buy/Sell carried by the Type column, so
 // the sign is dropped here. SAVINGSPLAN rows have no Endbetrag, so fees are
 // added back for a buy (more cash out) and subtracted for a sell (less cash
@@ -100,10 +100,10 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 func portfolioValue(t *schema.Transaction) float64 {
 	// Falls back only when the document states no Endbetrag at all. A stated
 	// 0,00 is the settlement amount, not a missing one.
-	if t.FinalAmount != nil {
-		return math.Abs(*t.FinalAmount)
+	if t.NetAmount != nil {
+		return math.Abs(*t.NetAmount)
 	}
-	grossValue := schema.Amount(t.GrossValue)
+	grossValue := schema.Amount(t.GrossAmount)
 	if t.Type == "SELL" {
 		return grossValue - t.TotalCosts()
 	}

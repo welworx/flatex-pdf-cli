@@ -205,14 +205,17 @@ with depot metadata:
       "type": "BUY",
       "quantity": 10.0,
       "price": 25.50,
-      "price_currency": "EUR",
-      "gross_value": 255.00,
+      "gross_amount": 255.00,
+      "gross_currency": "EUR",
+      "exchange_rate": 1,
+      "net_amount": -263.50,
+      "net_currency": "EUR",
       "costs": {
         "provision": 5.50,
         "own_expenses": 0,
         "foreign_expenses": 3.00,
         "total": 8.50,
-        "fees": {
+        "foreign_expenses_breakdown": {
           "courtage": 0,
           "trading_fee": 0.50,
           "settlement": 2.50,
@@ -222,8 +225,6 @@ with depot metadata:
           "other": 0
         }
       },
-      "final_amount": -263.50,
-      "final_currency": "EUR",
       "custody_type": "Wertpapierrechnung",
       "depositary": "Clearstream Lux.",
       "deposit_country": "GB",
@@ -233,7 +234,7 @@ with depot metadata:
 }
 ```
 
-Two things worth knowing before you use the numbers:
+Four things worth knowing before you use the numbers:
 
 - **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
   crypto and savings plans) — not the date printed at the top of the letter.
@@ -241,11 +242,24 @@ Two things worth knowing before you use the numbers:
   alongside it, and on a real statement all three are usually different days.
   Dividends and interest use `Valuta` as their `date`, since that is when the
   money moves.
+- **The settlement fields are the same on every document type.** A trade's
+  `Kurswert` and a dividend's `Bruttoausschüttung` both land in `gross_amount`;
+  `Endbetrag` always lands in `net_amount`, whichever document it came from.
+  The identity that ties them together is
+  `net_amount = gross_amount ∓ costs.total ∓ withholding_tax` — deductions add
+  to what a purchase costs you and subtract from what a sale pays you. The
+  parser enforces it on every document it parses and fails loudly when it
+  breaks.
+- **Only `net_amount` carries a sign.** It is negative when money left the
+  account. `gross_amount`, `withholding_tax` and everything under `costs` are
+  unsigned magnitudes; which direction they apply in follows from `type`.
 - **`costs.total` is the transaction's total charge** — `Provision` plus
-  `Eigene Spesen` plus `Fremde Spesen`. The entries under `costs.fees` itemise
-  `foreign_expenses` and are already counted in the total; adding them on top
-  double-counts. `costs` is absent when a document has no charge block at all,
-  which is how a real 0,00 EUR fee stays distinguishable from an unparsed one.
+  `Eigene Spesen` plus `Fremde Spesen`. The document prints the last of those
+  as `* Fremde Spesen` and lists its components under the matching footnote, so
+  the entries in `costs.foreign_expenses_breakdown` itemise `foreign_expenses`
+  and are already counted in the total; adding them on top double-counts.
+  `costs` is absent when a document has no charge block at all, which is how a
+  real 0,00 EUR fee stays distinguishable from an unparsed one.
 
 Full field reference (common, trade, dividend, interest, accumulating, order,
 and crypto fields): **[docs/output-format.md](docs/output-format.md)**.

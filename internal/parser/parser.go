@@ -153,13 +153,13 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		Type:              tradeType,
 		Quantity:          ptr(quantity),
 		Price:             ptr(price),
-		PriceCurrency:     currency,
-		GrossValue:        ptr(grossValue),
+		GrossCurrency:     currency,
+		GrossAmount:       ptr(grossValue),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
-		FinalAmount:       finalAmount,
-		FinalCurrency:     "EUR",
+		NetAmount:         finalAmount,
+		NetCurrency:       "EUR",
 		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		Depositary:        extractString(text, `Lagerstelle[^\S\n]*:[^\S\n]*([^\n*]+)`),
 		DepositCountry:    countryISO2(extractString(text, `Lagerland[^\S\n]*:[^\S\n]*([^\n*]+)`)),
@@ -229,14 +229,14 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		Type:              tradeType,
 		Quantity:          ptr(quantity),
 		Price:             ptr(price),
-		PriceCurrency:     "EUR",
-		GrossValue:        ptr(grossValue),
+		GrossCurrency:     "EUR",
+		GrossAmount:       ptr(grossValue),
 		Costs:             extractCosts(text),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
 		ExchangeRate:      exchangeRate,
-		FinalAmount:       finalAmount,
-		FinalCurrency:     "EUR",
+		NetAmount:         finalAmount,
+		NetCurrency:       "EUR",
 		CustodyType:       extractString(text, `Verwahrart:\s*([^\n*]+)`),
 		Depositary:        extractString(text, `Kryptoverwahrer:\s*([^\n*]+)`),
 		ValueDate:         convertGermanDate(extractString(text, `Valuta:\s*(\d{2}\.\d{2}\.\d{4})`)),
@@ -621,7 +621,7 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		// The Betrag column is the cash that moved, not the value of the
 		// shares: a row settles (Betrag - charge) / Kurs shares and the
 		// Sammelabrechnung never prints the charge. Recovering it here keeps
-		// GrossValue meaning the same thing it means on a trade confirmation
+		// GrossAmount meaning the same thing it means on a trade confirmation
 		// (Kurswert, shares only) instead of silently folding a fee into the
 		// purchase price.
 		settled := mustFloat(m[6])
@@ -631,7 +631,7 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
 		}
 
-		// Buys move cash out, sales move it in, matching FinalAmount's sign
+		// Buys move cash out, sales move it in, matching NetAmount's sign
 		// convention on trade confirmations.
 		finalAmount := -settled
 		if tradeType == "SELL" {
@@ -649,11 +649,11 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 			Type:          tradeType,
 			Quantity:      ptr(quantity),
 			Price:         ptr(price),
-			PriceCurrency: "EUR",
-			GrossValue:    ptr(shareValue),
+			GrossCurrency: "EUR",
+			GrossAmount:   ptr(shareValue),
 			Costs:         &schema.Costs{Unitemised: charge, Total: charge},
-			FinalAmount:   ptr(finalAmount),
-			FinalCurrency: "EUR",
+			NetAmount:     ptr(finalAmount),
+			NetCurrency:   "EUR",
 			// Savings-plan rows are settled in EUR and carry no Devisenkurs
 			// line; without an explicit 1.0 the PP export writes an exchange
 			// rate of 0.
@@ -730,7 +730,7 @@ func extractCosts(text string) *schema.Costs {
 	// folgende Gebühren" heading, which marks them as the breakdown of
 	// Fremde Spesen rather than additional charges.
 	if strings.Contains(text, "Enthalten sind folgende Gebühren") {
-		c.Fees = &schema.Fees{
+		c.ForeignExpensesBreakdown = &schema.FeeBreakdown{
 			Courtage:                feeLine(text, `Courtage`),
 			TradingFee:              feeLine(text, `Tradinggebühr`),
 			Settlement:              feeLine(text, `Regulierung`),

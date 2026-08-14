@@ -21,14 +21,19 @@ All extracted transactions are returned as JSON objects with the following struc
   "type": "BUY",
   "quantity": 10.0,
   "price": 25.50,
-  "price_currency": "EUR",
-  "gross_value": 255.00,
+  "gross_amount": 255.00,
+  "gross_currency": "EUR",
+  "withholding_tax": 0.00,
+  "gain_loss": 0.00,
+  "exchange_rate": 1.0,
+  "net_amount": -263.50,
+  "net_currency": "EUR",
   "costs": {
     "provision": 5.50,
     "own_expenses": 0.00,
     "foreign_expenses": 3.00,
     "total": 8.50,
-    "fees": {
+    "foreign_expenses_breakdown": {
       "courtage": 0.00,
       "trading_fee": 0.50,
       "settlement": 2.50,
@@ -38,11 +43,6 @@ All extracted transactions are returned as JSON objects with the following struc
       "other": 0.00
     }
   },
-  "withholding_tax": 0.00,
-  "gain_loss": 0.00,
-  "exchange_rate": 1.0,
-  "final_amount": -263.50,
-  "final_currency": "EUR",
   "custody_type": "Wertpapierrechnung",
   "depositary": "Clearstream Lux.",
   "deposit_country": "GB",
@@ -63,9 +63,9 @@ All extracted transactions are returned as JSON objects with the following struc
 
 ## A stated `0,00` is not a missing value
 
-Every amount and quantity field — `quantity`, `price`, `gross_value`,
-`final_amount`, `limit`, `withholding_tax`, `gain_loss`,
-`distribution_per_share`, `gross_amount`, `net_amount`, `interest_rate`,
+Every amount and quantity field — `quantity`, `price`, `gross_amount`,
+`net_amount`, `limit`, `withholding_tax`, `gain_loss`,
+`distribution_per_share`, `interest_rate`,
 `reinvestment_per_share` — follows one rule:
 
 | The document… | JSON | CSV |
@@ -127,22 +127,52 @@ re-parsing.
 For pure cash events with no trade — `DIVIDEND`, `INTEREST`,
 `ACCUMULATING` — `date` is the `Valuta`, since that is when the money moves.
 
+## Settlement Amounts (All Settled Documents)
+
+Every document that settles states a gross figure, its deductions, and the
+`Endbetrag` that actually moved. Those are **one set of fields shared by all
+document types**, not a separate set per type — a trade's `Kurswert` and a
+dividend's `Bruttoausschüttung` both land in `gross_amount`, and `Endbetrag`
+always lands in `net_amount`.
+
+- `gross_amount` — Kurswert on a trade (quantity × price, before costs),
+  Bruttoausschüttung on a dividend; in either case the value before deductions
+- `gross_currency` — Currency of `gross_amount`
+- `withholding_tax` — Tax withheld on the transaction (Einbeh. KESt on trades,
+  Einbeh. Steuer on dividends and crypto); see
+  [Withholding tax](#withholding-tax-austrian-kest)
+- `withholding_tax_currency` — Currency of `withholding_tax`
+- `gain_loss` — Capital gain or loss (sell transactions)
+- `exchange_rate` — Currency exchange rate (1.0 when the document has no Devisenkurs)
+- `net_amount` — Endbetrag, signed by cash direction: **negative for a buy**
+- `net_currency` — Currency of `net_amount`
+- `costs` — Charge block; see [Costs](#costs)
+
+The three are tied together by
+`net_amount = gross_amount ∓ costs.total ∓ withholding_tax`: deductions add to
+what a purchase costs and subtract from what a sale pays. The parser checks
+this identity on every document and fails loudly when it does not hold, which
+is how a value that landed in the wrong column is caught.
+
+**`net_amount` is the only signed field.** `gross_amount`, `withholding_tax`
+and everything under `costs` are unsigned magnitudes; the direction they apply
+in follows from `type`. Summing `net_amount` across a mixed batch is
+meaningful, summing `gross_amount` across one is not.
+
+> **Renamed in v0.3.0.** These fields were previously spelled `gross_value`,
+> `final_amount`, `final_currency` and `price_currency` on trades, and
+> `gross_amount`, `net_amount`, `net_currency`, `gross_currency` on dividends —
+> two names for each of the same quantities. `price_currency` was doubly
+> misleading: `price` is only ever parsed in EUR, and the field actually held
+> the currency of `Kurswert`. The trade spellings are gone; use the names above.
+
 ## Trade-Specific Fields
 
 - `type` — BUY or SELL
 - `quantity` — Number of shares/units
-- `price` — Price per unit
-- `price_currency` — Currency of price
-- `gross_value` — Kurswert: quantity × price, before costs
+- `price` — Price per unit (Kurs), always in EUR
 - `order_date` — Auftragsdatum, when the order was placed
 - `value_date` — Valuta, when the trade settles
-- `costs` — Charge block; see [Costs](#costs)
-- `withholding_tax` — Tax withheld on the transaction (Einbeh. KESt on trades,
-  Einbeh. Steuer on dividends and crypto)
-- `gain_loss` — Capital gain or loss (sell transactions)
-- `exchange_rate` — Currency exchange rate (1.0 when the document has no Devisenkurs)
-- `final_amount` — Endbetrag, signed by cash direction: **negative for a buy**
-- `final_currency` — Currency of final amount
 - `custody_type` — Verwahrart, e.g. `Wertpapierrechnung`
 - `depositary` — Lagerstelle, e.g. `Clearstream Lux.`
 - `deposit_country` — Lagerland, translated to an ISO 3166-1 alpha-2 code
@@ -167,24 +197,28 @@ nothing" and "this was never parsed" are different answers.
 - `foreign_expenses` — Fremde Spesen, charges passed through from third parties
 - `total` — `provision + own_expenses + foreign_expenses`; the number to use as
   the transaction's total cost
-- `fees` — itemisation of `foreign_expenses` from the document's
-  "Enthalten sind folgende Gebühren" block, present only when that block is:
-  `courtage`, `trading_fee` (Tradinggebühr), `settlement` (Regulierung),
-  `closing_notes` (Schlussnoten), `ls_allocation` (LS-Umlegung),
-  `financial_transaction_tax` (Finanztransaktionssteuer), `other` (Sonstige).
+- `foreign_expenses_breakdown` — itemisation of `foreign_expenses`, present
+  only when the document prints it: `courtage`, `trading_fee` (Tradinggebühr),
+  `settlement` (Regulierung), `closing_notes` (Schlussnoten), `ls_allocation`
+  (LS-Umlegung), `financial_transaction_tax` (Finanztransaktionssteuer),
+  `other` (Sonstige).
 
-The `fees` components sum to `foreign_expenses` and are therefore already
-counted in `total`. **Do not add them on top of it.**
+The document itself marks what this breakdown belongs to with a footnote: the
+charge line reads `* Fremde Spesen`, and the starred note below it —
+"`* Enthalten sind folgende Gebühren`" — lists the components. They therefore
+sum to `foreign_expenses` and are already counted in `total`. **Do not add
+them on top of it.**
+
+> **Renamed in v0.3.0.** This block was called `fees`, a name that said nothing
+> about which charge it itemised and so invited exactly that double-count.
 
 ## Dividend-Specific Fields
 
+The gross, tax and net amounts are the shared
+[settlement amounts](#settlement-amounts-all-settled-documents).
+
 - `distribution_per_share` — Dividend per unit held
 - `distribution_currency` — Currency of dividend
-- `gross_amount` — Total dividend before withholding
-- `gross_currency` — Currency of gross amount
-- `withholding_tax_currency` — Currency of withholding tax amount
-- `net_amount` — Dividend after withholding tax
-- `net_currency` — Currency of net amount
 - `ex_date` — Ex-dividend date
 - `value_date` — Value date for the payment
 
@@ -228,3 +262,14 @@ With `-include-metadata`, the transaction list is wrapped in an object with depo
   ]
 }
 ```
+
+The metadata describes the **whole batch**, and `transactions` carries no
+per-transaction depot. So when a batch spans more than one depot — two
+accounts in the same folder, or a depot transfer — there is no single truthful
+value to put here, and `-include-metadata` fails with the conflicting depot
+numbers rather than writing one of them. Parse each depot separately, or drop
+the flag if you only want the transactions.
+
+> **Fixed in v0.3.0.** Previously the first file's depot was captured and
+> stamped over the entire batch, silently reattributing a second account's
+> transactions to the first holder.

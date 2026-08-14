@@ -12,17 +12,18 @@ import (
 // order, as the generic CSV export's column headers.
 var csvHeader = []string{
 	"source", "order_number", "transaction_number", "document_type", "isin", "wkn",
-	"security_name", "date", "order_date", "type", "quantity", "price", "price_currency",
-	"gross_value", "provision", "own_expenses", "foreign_expenses", "unitemised", "total_costs",
+	"security_name", "date", "order_date", "value_date", "type", "quantity", "price",
+	"gross_amount", "gross_currency",
+	"provision", "own_expenses", "foreign_expenses", "unitemised", "total_costs",
 	"fee_courtage", "fee_trading", "fee_settlement", "fee_closing_notes",
 	"fee_ls_allocation", "fee_financial_transaction_tax", "fee_other",
-	"withholding_tax", "gain_loss", "exchange_rate",
-	"final_amount", "final_currency", "custody_type", "depositary", "deposit_country",
-	"execution_venue",
-	"limit", "valid_until", "distribution_per_share", "distribution_currency",
-	"gross_amount", "gross_currency", "withholding_tax_currency", "net_amount",
-	"net_currency", "ex_date", "value_date", "interest_rate", "period_from",
-	"period_to", "reinvestment_per_share", "reinvestment_currency", "accrual_date",
+	"withholding_tax", "withholding_tax_currency", "gain_loss", "exchange_rate",
+	"net_amount", "net_currency",
+	"custody_type", "depositary", "deposit_country", "execution_venue",
+	"limit", "valid_until",
+	"distribution_per_share", "distribution_currency", "ex_date",
+	"interest_rate", "period_from", "period_to",
+	"reinvestment_per_share", "reinvestment_currency", "accrual_date",
 }
 
 // WriteCSV writes one row per transaction, dumping every schema.Transaction
@@ -38,17 +39,20 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 	for _, t := range txns {
 		row := []string{
 			t.Source, t.OrderNumber, t.TransactionNumber, t.DocumentType, t.ISIN, t.WKN,
-			t.SecurityName, t.Date, t.OrderDate, t.Type, formatFloatPtr(t.Quantity), formatFloatPtr(t.Price), t.PriceCurrency,
-			formatFloatPtr(t.GrossValue),
+			t.SecurityName, t.Date, t.OrderDate, t.ValueDate, t.Type,
+			formatFloatPtr(t.Quantity), formatFloatPtr(t.Price),
+			formatFloatPtr(t.GrossAmount), t.GrossCurrency,
 		}
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
-			formatFloatPtr(t.WithholdingTax), formatFloatPtr(t.GainLoss), formatFloat(t.ExchangeRate),
-			formatFloatPtr(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
-			formatFloatPtr(t.Limit), t.ValidUntil, formatFloatPtr(t.DistributionPerShare), t.DistributionCurrency,
-			formatFloatPtr(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloatPtr(t.NetAmount),
-			t.NetCurrency, t.ExDate, t.ValueDate, formatFloatPtr(t.InterestRate), t.PeriodFrom,
-			t.PeriodTo, formatFloatPtr(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
+			formatFloatPtr(t.WithholdingTax), t.WithholdingTaxCurrency,
+			formatFloatPtr(t.GainLoss), formatFloat(t.ExchangeRate),
+			formatFloatPtr(t.NetAmount), t.NetCurrency,
+			t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
+			formatFloatPtr(t.Limit), t.ValidUntil,
+			formatFloatPtr(t.DistributionPerShare), t.DistributionCurrency, t.ExDate,
+			formatFloatPtr(t.InterestRate), t.PeriodFrom, t.PeriodTo,
+			formatFloatPtr(t.ReinvestmentPerShare), t.ReinvestmentCurrency, t.AccrualDate,
 		)
 		if err := cw.Write(row); err != nil {
 			return err
@@ -64,9 +68,9 @@ func costColumns(c *schema.Costs) []string {
 	if c == nil {
 		return make([]string, 12)
 	}
-	f := c.Fees
+	f := c.ForeignExpensesBreakdown
 	if f == nil {
-		f = &schema.Fees{}
+		f = &schema.FeeBreakdown{}
 	}
 	return []string{
 		formatFloat(c.Provision), formatFloat(c.OwnExpenses),

@@ -28,14 +28,18 @@ type Costs struct {
 
 	Total float64 `json:"total"` // Provision + Eigene + Fremde Spesen + Unitemised
 
-	// Fees itemises ForeignExpenses ("* Enthalten sind folgende Gebühren").
-	// Its components sum to ForeignExpenses, so they are already counted in
-	// Total and must not be added on top of it.
-	Fees *Fees `json:"fees,omitempty"`
+	// ForeignExpensesBreakdown itemises ForeignExpenses and nothing else. The
+	// document marks the relationship with a footnote: the charge line reads
+	// "* Fremde Spesen" and the starred note below it lists the components
+	// ("* Enthalten sind folgende Gebühren"). They therefore sum to
+	// ForeignExpenses and are already inside Total — adding them on top
+	// double-counts. It was called "fees" before, which said nothing about
+	// which charge it belonged to and invited exactly that mistake.
+	ForeignExpensesBreakdown *FeeBreakdown `json:"foreign_expenses_breakdown,omitempty"`
 }
 
-// Fees is the itemised breakdown of Costs.ForeignExpenses.
-type Fees struct {
+// FeeBreakdown is the itemised breakdown of Costs.ForeignExpenses.
+type FeeBreakdown struct {
 	Courtage                float64 `json:"courtage"`
 	TradingFee              float64 `json:"trading_fee"`               // Tradinggebühr
 	Settlement              float64 `json:"settlement"`                // Regulierung
@@ -60,9 +64,13 @@ type Transaction struct {
 	// date (Handelstag/Schlusstag/Buchtag) for anything that moves a
 	// position, the value date (Valuta) for pure cash events (dividend,
 	// interest, accumulation). OrderDate and ValueDate carry the other two
-	// so a consumer can pick a different convention without re-parsing.
+	// so a consumer can pick a different convention without re-parsing. All
+	// three are declared together so they are emitted together: ValueDate
+	// used to sit among the dividend fields and surfaced at the far end of a
+	// trade object, a long way from the two dates it belongs with.
 	Date      string `json:"date"`
 	OrderDate string `json:"order_date,omitempty"` // Auftragsdatum — when the order was placed
+	ValueDate string `json:"value_date,omitempty"` // Valuta — when the cash settled
 
 	// Every amount and quantity below is a pointer, so a document printing
 	// "0,00" stays distinguishable from one that prints no such line at all.
@@ -75,37 +83,52 @@ type Transaction struct {
 	// ExchangeRate is deliberately NOT a pointer: no document states a
 	// Devisenkurs of 0,000000, and an absent one already means 1.0.
 
-	// TRADE fields
-	Type           string   `json:"type,omitempty"`
-	Quantity       *float64 `json:"quantity,omitempty"`
-	Price          *float64 `json:"price,omitempty"`
-	PriceCurrency  string   `json:"price_currency,omitempty"`
-	GrossValue     *float64 `json:"gross_value,omitempty"`
-	WithholdingTax *float64 `json:"withholding_tax,omitempty"`
-	GainLoss       *float64 `json:"gain_loss,omitempty"`
-	ExchangeRate   float64  `json:"exchange_rate,omitempty"`
-	FinalAmount    *float64 `json:"final_amount,omitempty"`
-	FinalCurrency  string   `json:"final_currency,omitempty"`
-	CustodyType    string   `json:"custody_type,omitempty"`
-	Depositary     string   `json:"depositary,omitempty"`
-	DepositCountry string   `json:"deposit_country,omitempty"` // Lagerland, as an ISO 3166-1 alpha-2 code
-	ExecutionVenue string   `json:"execution_venue,omitempty"` // Ausf.platz/-art
-	Costs          *Costs   `json:"costs,omitempty"`
+	// Position fields — what moved, and at what unit price.
+	Type     string   `json:"type,omitempty"` // BUY or SELL
+	Quantity *float64 `json:"quantity,omitempty"`
+	Price    *float64 `json:"price,omitempty"` // Kurs, always in EUR
+
+	// Settlement amounts. Every document that settles states a gross figure,
+	// deductions, and the Endbetrag that actually moved, so these are one set
+	// of fields shared by all of them rather than one set per document type.
+	//
+	// They used to be two: a trade wrote gross_value/final_amount/
+	// price_currency and a dividend wrote gross_amount/net_amount/
+	// gross_currency, for the same three quantities read off the same labels
+	// — Endbetrag became "final_amount" on one document and "net_amount" on
+	// the other. A consumer that handled trades and missed the dividend
+	// spelling read a silent zero. price_currency was the worst of them: Kurs
+	// is only ever parsed in EUR, and the field actually carried the currency
+	// of Kurswert, i.e. of the gross amount, which is also how the Portfolio
+	// Performance export has always used it.
+	//
+	// NetAmount is signed by cash direction — negative when money left the
+	// account. GrossAmount, WithholdingTax and Costs are unsigned magnitudes;
+	// which way they apply follows from Type.
+	GrossAmount            *float64 `json:"gross_amount,omitempty"`   // Kurswert / Bruttoausschüttung
+	GrossCurrency          string   `json:"gross_currency,omitempty"` // currency of GrossAmount
+	WithholdingTax         *float64 `json:"withholding_tax,omitempty"`
+	WithholdingTaxCurrency string   `json:"withholding_tax_currency,omitempty"`
+	GainLoss               *float64 `json:"gain_loss,omitempty"`
+	ExchangeRate           float64  `json:"exchange_rate,omitempty"`
+	NetAmount              *float64 `json:"net_amount,omitempty"`   // Endbetrag
+	NetCurrency            string   `json:"net_currency,omitempty"` // currency of NetAmount
+	Costs                  *Costs   `json:"costs,omitempty"`
+
+	// Custody and execution
+	CustodyType    string `json:"custody_type,omitempty"`
+	Depositary     string `json:"depositary,omitempty"`
+	DepositCountry string `json:"deposit_country,omitempty"` // Lagerland, as an ISO 3166-1 alpha-2 code
+	ExecutionVenue string `json:"execution_venue,omitempty"` // Ausf.platz/-art
 
 	// ORDER fields (Sammelauftragsbestätigung — pending orders)
 	Limit      *float64 `json:"limit,omitempty"`       // Limit price
 	ValidUntil string   `json:"valid_until,omitempty"` // Gültig bis
 
 	// DIVIDEND fields
-	DistributionPerShare   *float64 `json:"distribution_per_share,omitempty"`
-	DistributionCurrency   string   `json:"distribution_currency,omitempty"`
-	GrossAmount            *float64 `json:"gross_amount,omitempty"`
-	GrossCurrency          string   `json:"gross_currency,omitempty"`
-	WithholdingTaxCurrency string   `json:"withholding_tax_currency,omitempty"`
-	NetAmount              *float64 `json:"net_amount,omitempty"`
-	NetCurrency            string   `json:"net_currency,omitempty"`
-	ExDate                 string   `json:"ex_date,omitempty"`
-	ValueDate              string   `json:"value_date,omitempty"`
+	DistributionPerShare *float64 `json:"distribution_per_share,omitempty"`
+	DistributionCurrency string   `json:"distribution_currency,omitempty"`
+	ExDate               string   `json:"ex_date,omitempty"`
 
 	// INTEREST fields
 	InterestRate *float64 `json:"interest_rate,omitempty"`
