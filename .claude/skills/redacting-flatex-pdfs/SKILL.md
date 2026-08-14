@@ -69,6 +69,7 @@ Assign a **different** persona per fixture so the corpus exercises titles, umlau
 | sparplan 1 | Herrn / Dr. Klaus Bergmann | Bergmannsgasse 17, Stiege 5 Tür 3, 1050 Wien | 55000000051 / — | — / 0005500055 |
 | krypto 1 | Herrn / Dr. Stefan Berger | Kirschenallee 9, Stiege 6 Tür 1, 1090 Wien | 66000000061 / 66000000062 (Verwahrkonto 66000000063) | 6600000066 / 660000111 |
 | order 1 | Herrn / Dr. Lukas Hofer | Hofergasse 4, Stiege 8 Tür 2, 1080 Wien | 77000000071 / — | — / 770000111, 770000222 |
+| trade 3 | Herrn / Mag. Felix Steiner | Wagramer Str. 118, Stiege 4 Tür 311, 1220 Wien | 88000000081 / 88000000082 | 8800000088 / 880000088 |
 
 Every fixture has its own name, address and number block, so a cross-fixture mix-up cannot pass a test unnoticed. Keep it that way when adding one.
 
@@ -81,12 +82,19 @@ Keep digit-string **lengths equal** to the originals so mono-column alignment is
 ```python
 import fitz
 from reflow import reflow
+# Older statements name their fonts with the literal base-14 names instead of
+# using the embedded subsets. Match longest key first so "Courier-Bold" wins
+# over "Courier", and raise on an unknown font rather than defaulting: silently
+# falling back to "helv" renders a mono column in a proportional face and
+# destroys its alignment.
 FONTMAP = {"CursorBFO-Regular":"cour","CursorBFO-Bold":"cobo",
-           "HerosBFO-Regular":"helv","HerosBFO-Bold":"hebo","OfficinaSans":"helv"}
+           "HerosBFO-Regular":"helv","HerosBFO-Bold":"hebo","OfficinaSans":"helv",
+           "Courier-Bold":"cobo","Courier":"cour",
+           "Helvetica-Bold":"hebo","Helvetica":"helv"}
 def b14(f):
-    for k,v in FONTMAP.items():
-        if k in f: return v
-    return "helv"
+    for k in sorted(FONTMAP, key=len, reverse=True):
+        if k in f: return FONTMAP[k]
+    raise SystemExit(f"unmapped font {f!r} — add it to FONTMAP")
 
 def redact(src, out, replacements):           # replacements: {old_text: synthetic}
     doc = fitz.open(src)
@@ -148,6 +156,7 @@ def redact(src, out, replacements):           # replacements: {old_text: synthet
 - **Collateral damage from the redaction rect** → `apply_redactions()` deletes every glyph the rect *touches*, and `search_for` returns a full line box that reaches into the line above. On these pages the recipient name overlaps the small document code printed over it, silently deleting 13 digits of that code. Inset the rect (~18% of its height, plus ~0.3pt horizontally); a glyph is still removed as long as the rect intersects it at all, so shrinking cannot leave PII behind.
 - **Losing the punctuation next to a value** → the salutation reads `…<name>,` and the comma sits flush against the name. Redacting just the name clips it, and the extractor's salutation fallback (`Sehr geehrte[rn]? (Herr|Frau) (.+?),`) then matches nothing, so `depot_holder` comes out empty. Claim the comma in the replacement (`"<name>," -> "<new>,"`) and place longer keys first so the bare name does not re-match the same spot.
 - **Reusing embedded fonts** → Identity-H subsets can't map new Unicode; insertion silently falls back to Helvetica and the body text stops being monospaced. Always map to the base-14 clone.
+- **A `FONTMAP` miss falling through to a default** → the older trade layout names its fonts plain `Courier`/`Helvetica`, which matches none of the `*BFO` keys. With a `return "helv"` default, every replacement is inserted proportional: the page still renders and parses, but each mono column is visibly misaligned. Raise on an unmapped font instead — the failure has to be loud, because the JSON diff cannot see it.
 - **Changing digit-string length** → breaks the colon-aligned mono columns. Keep counts equal.
 - **Trying to re-insert rotated/vertical codes** → `insert_textbox(..., rotate=90)` often fails to fit and leaves a blank. Leave the barcode/postal codes alone.
 - **Trusting Presidio output verbatim** → on German it tags public board members and boilerplate. Curate against the field table.

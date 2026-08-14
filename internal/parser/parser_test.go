@@ -827,6 +827,19 @@ func TestAllFixturesParse(t *testing.T) {
 			depositCountry: "GB",
 		},
 		{
+			file: "trade_sample_3.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "880000088/1", transactionNumber: "8800000088",
+			depotNumber: "88000000081", depotHolder: "Steiner, Felix",
+			// Letter date, Auftragsdatum and Handelstag are all 15.01.2025.
+			date: "2025-01-15", orderDate: "2025-01-15", valueDate: "2025-01-17",
+			// This is the older layout, whose mono body font is StandardEncoding:
+			// gxpdf decodes it as WinAnsi, so "Großbritannien" arrives as
+			// "Groûbritannien" and yields no country unless extractTextFromPDF
+			// repairs it. Asserting GB here is what pins that fix.
+			depositCountry: "GB",
+			tradeType:      "BUY",
+		},
+		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
 			orderNumber: "660000111/1", transactionNumber: "6600000066",
 			date: "2026-01-29", valueDate: "2026-01-30",
