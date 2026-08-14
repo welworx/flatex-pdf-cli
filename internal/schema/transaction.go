@@ -70,8 +70,13 @@ type Transaction struct {
 	Price          float64 `json:"price,omitempty"`
 	PriceCurrency  string  `json:"price_currency,omitempty"`
 	GrossValue     float64 `json:"gross_value,omitempty"`
-	WithholdingTax float64 `json:"withholding_tax,omitempty"`
-	GainLoss       float64 `json:"gain_loss,omitempty"`
+	// Pointers so that a document printing "0,00 EUR" stays distinguishable
+	// from one that prints no such line at all. A Verkauf sold at cost has a
+	// genuine 0,00 Gewinn/Verlust; with a plain float64 that value was dropped
+	// by omitempty and read back as "field absent". Same nil-means-absent
+	// convention as Costs below.
+	WithholdingTax *float64 `json:"withholding_tax,omitempty"`
+	GainLoss       *float64 `json:"gain_loss,omitempty"`
 	ExchangeRate   float64 `json:"exchange_rate,omitempty"`
 	FinalAmount    float64 `json:"final_amount,omitempty"`
 	FinalCurrency  string  `json:"final_currency,omitempty"`
@@ -105,6 +110,16 @@ type Transaction struct {
 	ReinvestmentPerShare float64 `json:"reinvestment_per_share,omitempty"`
 	ReinvestmentCurrency string  `json:"reinvestment_currency,omitempty"`
 	AccrualDate          string  `json:"accrual_date,omitempty"`
+}
+
+// Amount returns the value p points at, or 0 when p is nil. Use it wherever an
+// absent optional amount should behave as zero (arithmetic, formatting) while
+// the field itself stays nil-means-absent for callers that care.
+func Amount(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // TotalCosts returns the transaction's total charge, or 0 when the document

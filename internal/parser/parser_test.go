@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/welworx/flatex-pdf-cli/internal/extractor"
+	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
 // TestParseRoutesDocumentTypes covers the Parse dispatch table, which the
@@ -340,8 +341,8 @@ func TestParseDividend(t *testing.T) {
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 5.39 {
-		t.Errorf("expected WithholdingTax=5.39, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 5.39 {
+		t.Errorf("expected WithholdingTax=5.39, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
@@ -390,8 +391,8 @@ func TestParseInterest(t *testing.T) {
 	if tx.GrossCurrency != "EUR" {
 		t.Errorf("expected GrossCurrency=EUR, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 3.40 {
-		t.Errorf("expected WithholdingTax=3.40, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 3.40 {
+		t.Errorf("expected WithholdingTax=3.40, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
@@ -455,8 +456,8 @@ func TestParseAccumulating(t *testing.T) {
 	if tx.GrossCurrency != "USD" {
 		t.Errorf("expected GrossCurrency=USD, got %s", tx.GrossCurrency)
 	}
-	if tx.WithholdingTax != 0.0 {
-		t.Errorf("expected WithholdingTax=0.0, got %f", tx.WithholdingTax)
+	if schema.Amount(tx.WithholdingTax) != 0.0 {
+		t.Errorf("expected WithholdingTax=0.0, got %f", schema.Amount(tx.WithholdingTax))
 	}
 	if tx.WithholdingTaxCurrency != "EUR" {
 		t.Errorf("expected WithholdingTaxCurrency=EUR, got %s", tx.WithholdingTaxCurrency)
@@ -809,6 +810,8 @@ func TestAllFixturesParse(t *testing.T) {
 		depositCountry    string
 		tradeType         string
 		securityName      string
+		gainLoss          *float64
+		withholdingTax    *float64
 	}{
 		{
 			file: "trade_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
@@ -842,6 +845,18 @@ func TestAllFixturesParse(t *testing.T) {
 			depositCountry: "GB",
 			tradeType:      "BUY",
 			securityName:   "VANGUARD FTSE ALL-WLD UCI",
+		},
+		{
+			// The only sale in the corpus. It is what pins the SELL side of
+			// checkSettlement (deductions come off the proceeds, not onto
+			// them) and the only fixture with a non-zero Gewinn/Verlust.
+			file: "verkauf_sample_1.pdf", docType: "TRADE", wantTransactions: 1,
+			orderNumber: "990000099/1", transactionNumber: "9900000099",
+			depotNumber: "99000000091", depotHolder: "Wallner, Sophie",
+			date: "2024-12-18", orderDate: "2024-12-17", valueDate: "2024-12-20",
+			depositCountry: "GB", tradeType: "SELL",
+			securityName: "VANGUARD S&P 500 ETF",
+			gainLoss:     amt(403.97), withholdingTax: amt(24.51),
 		},
 		{
 			file: "krypto_sample_1.pdf", docType: "CRYPTO", wantTransactions: 1,
@@ -911,6 +926,22 @@ func TestAllFixturesParse(t *testing.T) {
 			} {
 				if d.want != "" && d.got != d.want {
 					t.Errorf("%s = %q, want %q", d.name, d.got, d.want)
+				}
+			}
+			for _, d := range []struct {
+				name      string
+				got, want *float64
+			}{
+				{"gain/loss", txs[0].GainLoss, tc.gainLoss},
+				{"withholding tax", txs[0].WithholdingTax, tc.withholdingTax},
+			} {
+				if d.want == nil {
+					continue
+				}
+				if d.got == nil {
+					t.Errorf("%s = nil, want %.2f", d.name, *d.want)
+				} else if *d.got != *d.want {
+					t.Errorf("%s = %.2f, want %.2f", d.name, *d.got, *d.want)
 				}
 			}
 		})
@@ -1042,7 +1073,7 @@ func TestParseTradeCosts(t *testing.T) {
 		{"Tradinggebühr", tx.Costs.Fees.TradingFee, 0.50},
 		{"Regulierung", tx.Costs.Fees.Settlement, 2.50},
 		{"Courtage", tx.Costs.Fees.Courtage, 0.00},
-		{"Einbeh. KESt", tx.WithholdingTax, 0.25},
+		{"Einbeh. KESt", schema.Amount(tx.WithholdingTax), 0.25},
 		{"Endbetrag", tx.FinalAmount, -2039.85},
 	}
 	for _, c := range checks {

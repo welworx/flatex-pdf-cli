@@ -119,19 +119,25 @@ func validateTransaction(t *schema.Transaction) error {
 // exactly, which makes it the strongest signal available that every figure
 // landed in the field it belongs to.
 func checkSettlement(t *schema.Transaction) error {
-	// Restricted to purchases: on a sale the deductions reverse sign, and there
-	// is no sell document in the fixtures to confirm the arrangement against.
-	// Guessing at it would risk failing every future sale.
-	if t.Type != "BUY" || t.FinalAmount == 0 || t.GrossValue == 0 {
+	if (t.Type != "BUY" && t.Type != "SELL") || t.FinalAmount == 0 || t.GrossValue == 0 {
 		return nil
 	}
-	want := t.GrossValue + t.TotalCosts() + t.WithholdingTax
+	// A purchase adds the deductions to what you pay; a sale subtracts them
+	// from what you receive. Confirmed against verkauf_sample_1: gross 1540.00
+	// less costs 8.41 less KESt 24.51 equals the stated Endbetrag of 1507.08.
+	tax := schema.Amount(t.WithholdingTax)
+	sign := 1.0
+	verb := "plus"
+	if t.Type == "SELL" {
+		sign, verb = -1.0, "less"
+	}
+	want := t.GrossValue + sign*(t.TotalCosts()+tax)
 	got := math.Abs(t.FinalAmount)
 	if math.Abs(want-got) <= absTolerance {
 		return nil
 	}
-	return fmt.Errorf("settlement total %.2f does not equal gross %.2f plus costs %.2f plus tax %.2f (expected %.2f): the statement layout may have changed",
-		got, t.GrossValue, t.TotalCosts(), t.WithholdingTax, want)
+	return fmt.Errorf("settlement total %.2f does not equal gross %.2f %s costs %.2f %s tax %.2f (expected %.2f): the statement layout may have changed",
+		got, t.GrossValue, verb, t.TotalCosts(), verb, tax, want)
 }
 
 // checkProduct verifies that stated == a*b within tolerance. It is skipped when

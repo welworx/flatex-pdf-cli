@@ -8,6 +8,10 @@ import (
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
+// amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
+// the same as leaving the field nil.
+func amt(v float64) *float64 { return &v }
+
 func TestValidateTransaction(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -47,10 +51,23 @@ func TestValidateTransaction(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "sale is not settlement-checked",
-			// Deductions reverse sign on a sale and no sell fixture exists.
-			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 35, Price: 58.12, PriceCurrency: "EUR", GrossValue: 2034.20, FinalAmount: -2031.20, Costs: &schema.Costs{Total: 3.00}},
+			name: "sale settlement adds up",
+			// verkauf_sample_1's real figures: the deductions come off the
+			// proceeds rather than being added to them.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1507.08, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
 			wantErr: false,
+		},
+		{
+			name:    "sale settlement does not add up",
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1600.00, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			wantErr: true,
+		},
+		{
+			name: "sale deductions must not be added like a purchase",
+			// 1540.00 + 8.41 + 24.51 = 1572.92 is what a buy would settle at.
+			// This case fails if the sale ever reverts to the purchase sign.
+			txn:     &schema.Transaction{DocumentType: "TRADE", Type: "SELL", Quantity: 14, Price: 110, PriceCurrency: "EUR", GrossValue: 1540.00, FinalAmount: 1572.92, WithholdingTax: amt(24.51), Costs: &schema.Costs{Total: 8.41}},
+			wantErr: true,
 		},
 		{
 			name:    "missing settlement total is skipped",

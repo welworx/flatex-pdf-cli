@@ -43,7 +43,7 @@ func WriteCSV(w io.Writer, txns []*schema.Transaction) error {
 		}
 		row = append(row, costColumns(t.Costs)...)
 		row = append(row,
-			formatFloat(t.WithholdingTax), formatFloat(t.GainLoss), formatFloat(t.ExchangeRate),
+			formatFloatPtr(t.WithholdingTax), formatFloatPtr(t.GainLoss), formatFloat(t.ExchangeRate),
 			formatFloat(t.FinalAmount), t.FinalCurrency, t.CustodyType, t.Depositary, t.DepositCountry, t.ExecutionVenue,
 			formatFloat(t.Limit), t.ValidUntil, formatFloat(t.DistributionPerShare), t.DistributionCurrency,
 			formatFloat(t.GrossAmount), t.GrossCurrency, t.WithholdingTaxCurrency, formatFloat(t.NetAmount),
@@ -79,4 +79,14 @@ func costColumns(c *schema.Costs) []string {
 
 func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+// formatFloatPtr renders an optional amount, leaving the cell empty when the
+// document did not state one. Same convention costColumns uses for an absent
+// cost block, and it keeps a genuine 0 distinct from a missing value.
+func formatFloatPtr(p *float64) string {
+	if p == nil {
+		return ""
+	}
+	return formatFloat(*p)
 }

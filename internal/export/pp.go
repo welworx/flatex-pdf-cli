@@ -77,7 +77,7 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			t.WKN,
 			t.SecurityName,
 			formatAmount(t.TotalCosts(), lang),
-			formatAmount(t.WithholdingTax, lang),
+			formatAmount(schema.Amount(t.WithholdingTax), lang),
 			t.PriceCurrency,
 			formatAmount(t.ExchangeRate, lang),
 			note(t),
@@ -145,16 +145,16 @@ func WriteAccountTransactions(w io.Writer, txns []*schema.Transaction, lang stri
 		case "INTEREST":
 			ppType, value = labels["INTEREST"], t.NetAmount
 		case "ACCUMULATING":
-			if t.WithholdingTax == 0 {
+			if schema.Amount(t.WithholdingTax) == 0 {
 				continue
 			}
-			ppType, value = labels["TAXES"], t.WithholdingTax
+			ppType, value = labels["TAXES"], schema.Amount(t.WithholdingTax)
 		default:
 			continue
 		}
 		row := []string{
 			t.Date, ppType, formatAmount(value, lang), t.ISIN, t.WKN, t.SecurityName,
-			formatAmount(t.WithholdingTax, lang), "0", note(t),
+			formatAmount(schema.Amount(t.WithholdingTax), lang), "0", note(t),
 		}
 		if err := cw.Write(row); err != nil {
 			return err

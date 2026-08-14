@@ -70,6 +70,8 @@ Assign a **different** persona per fixture so the corpus exercises titles, umlau
 | krypto 1 | Herrn / Dr. Stefan Berger | Kirschenallee 9, Stiege 6 Tür 1, 1090 Wien | 66000000061 / 66000000062 (Verwahrkonto 66000000063) | 6600000066 / 660000111 |
 | order 1 | Herrn / Dr. Lukas Hofer | Hofergasse 4, Stiege 8 Tür 2, 1080 Wien | 77000000071 / — | — / 770000111, 770000222 |
 | trade 3 | Herrn / Mag. Felix Steiner | Wagramer Str. 118, Stiege 4 Tür 311, 1220 Wien | 88000000081 / 88000000082 | 8800000088 / 880000088 |
+| verkauf 1 | Frau / Mag. Sophie Wallner | Wallnergasse 31, Stiege 3 Tür 9, 1030 Wien | 99000000091 / 99000000092 | 9900000099 / 990000099 |
+| trade 3 | Herrn / Mag. Felix Steiner | Wagramer Str. 118, Stiege 4 Tür 311, 1220 Wien | 88000000081 / 88000000082 | 8800000088 / 880000088 |
 
 Every fixture has its own name, address and number block, so a cross-fixture mix-up cannot pass a test unnoticed. Keep it that way when adding one.
 
@@ -152,6 +154,20 @@ def redact(src, out, replacements):           # replacements: {old_text: synthet
 ## Common mistakes
 
 - **Skipping the reflow pass** → the page renders perfectly and a pixel diff passes, but every replaced identifier is out of position in stream order, so `gxpdf` hands the parser blanks. Trusting a visual diff alone is what let this ship.
+- **Stranding an unreplaced neighbour inside a replaced block** → `reflow` only
+  re-anchors the lines you actually replaced. Replace five of the six address
+  lines and the sixth stays behind at its old stream position, where the next
+  text in stream order absorbs it. On the Verkauf document that left
+  `ÖSTERREICH` glued to the right column's `Ausf.platz/-art    Tradegate`, so
+  `execution_venue` parsed as `TradegateSTERREICH` while the page still
+  rendered perfectly. Fix: map the leftover line to itself so it travels with
+  its block. Only the JSON diff (check 4) catches this — the residual scan, the
+  token multiset and the pixel diff all pass.
+- **A self-mapped or short key matching elsewhere** → `search_for` is
+  case-insensitive, so adding `"ÖSTERREICH": "ÖSTERREICH"` also hits
+  "Niederlassung **Österreich**" in the corporate footer and re-inserts it
+  uppercased on every page. Constrain such keys by position (page + rect) to
+  the occurrence you mean.
 - **Replacing the bank's own address** → a street regex (`…strasse|gasse|weg|platz`) matches **Gadollaplatz 1** in the letterhead and footer just as happily as the customer's street, and rewrites flatex's Graz address into the synthetic one. Deny-list the corporate boilerplate: `Gadollaplatz 1`, `8010 Graz`, `Große Gallusstr. 16-18`, `60312 Frankfurt am Main`, `Omniturm`.
 - **Collateral damage from the redaction rect** → `apply_redactions()` deletes every glyph the rect *touches*, and `search_for` returns a full line box that reaches into the line above. On these pages the recipient name overlaps the small document code printed over it, silently deleting 13 digits of that code. Inset the rect (~18% of its height, plus ~0.3pt horizontally); a glyph is still removed as long as the rect intersects it at all, so shrinking cannot leave PII behind.
 - **Losing the punctuation next to a value** → the salutation reads `…<name>,` and the comma sits flush against the name. Redacting just the name clips it, and the extractor's salutation fallback (`Sehr geehrte[rn]? (Herr|Frau) (.+?),`) then matches nothing, so `depot_holder` comes out empty. Claim the comma in the replacement (`"<name>," -> "<new>,"`) and place longer keys first so the bare name does not re-match the same spot.

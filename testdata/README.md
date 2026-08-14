@@ -23,6 +23,11 @@ identifier is out of position in content-stream order — which is the order
 at all and the rest silently returned empty order/transaction/depot numbers.
 After adding a fixture, run `go test ./internal/parser/ -run TestAllFixturesParse`.
 
+`verkauf_sample_1.pdf` is the corpus's only **sale**. It is what pins the SELL
+branch of `checkSettlement` — on a sale the costs and KESt come off the
+proceeds rather than being added to them (1540.00 − 8.41 − 24.51 = 1507.08) —
+and it is the only fixture carrying a non-zero `gain_loss`.
+
 `trade_sample_3.pdf` is the **older** trade layout: it uses the base-14 fonts
 directly (`Courier`, `Helvetica`) rather than the embedded `CursorBFO`/`HerosBFO`
 subsets, and its mono body font is StandardEncoding, which `gxpdf` decodes as
@@ -35,6 +40,7 @@ assertion fails if that repair is removed.
 | File | Type | Detected as |
 |------|------|-------------|
 | `trade_sample_1.pdf`, `trade_sample_2.pdf`, `trade_sample_3.pdf` | Wertpapierabrechnung Kauf | `TRADE` |
+| `verkauf_sample_1.pdf` | Wertpapierabrechnung Verkauf | `TRADE` |
 | `dividend_sample_1.pdf`, `dividend_sample_2.pdf` | Ertragsmitteilung / Ausschüttung | `DIVIDEND` |
 | `orderbestaetigung_sample_1.pdf` | Sammelauftragsbestätigung (order confirmation) | `ORDER` |
 | `krypto_sample_1.pdf` | Sammelabrechnung Kryptowerte (crypto settlement) | `CRYPTO` |

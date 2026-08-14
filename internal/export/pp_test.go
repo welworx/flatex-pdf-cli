@@ -8,6 +8,10 @@ import (
 	"github.com/welworx/flatex-pdf-cli/internal/schema"
 )
 
+// amt builds an optional-amount pointer; amt(0) is a stated 0,00, which is not
+// the same as leaving the field nil.
+func amt(v float64) *float64 { return &v }
+
 func TestWritePortfolioTransactionsBuyAndSell(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", Date: "2024-06-15", Type: "BUY", Quantity: 1, GrossValue: 50, Costs: &schema.Costs{Provision: 5, Total: 5}},
@@ -53,8 +57,8 @@ func TestWriteAccountTransactionsMapsTypes(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
 		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: 2},
-		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: 3},
-		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-18", WithholdingTax: 0}, // no real cash movement, must be skipped
+		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: amt(3)},
+		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-18", WithholdingTax: amt(0)}, // no real cash movement, must be skipped
 	}
 
 	var buf bytes.Buffer
@@ -211,7 +215,7 @@ func TestWriteAccountTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "DIVIDEND", ISIN: "IE000YU9K6K2", Date: "2024-06-15", NetAmount: 10},
 		{DocumentType: "INTEREST", Date: "2024-06-16", NetAmount: 2},
-		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: 3},
+		{DocumentType: "ACCUMULATING", ISIN: "IE000YU9K6K2", Date: "2024-06-17", WithholdingTax: amt(3)},
 	}
 
 	var buf bytes.Buffer

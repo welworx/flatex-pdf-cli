@@ -136,8 +136,8 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 	// Trades carry the withheld capital-gains tax as "Einbeh. KESt"; the
 	// "Einbeh. Steuer" label used on dividend and crypto documents does not
 	// appear here.
-	withholdingTax, _ := eurField(text, `Einbeh\.[^\S\n]*KESt`)
-	gainLoss, _ := eurField(text, `Gewinn/Verlust`)
+	withholdingTax := floatPtr(eurField(text, `Einbeh\.[^\S\n]*KESt`))
+	gainLoss := floatPtr(eurField(text, `Gewinn/Verlust`))
 	finalAmount, _ := eurField(text, `Endbetrag`)
 
 	transaction := &schema.Transaction{
@@ -211,8 +211,8 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	withholdingTax, _ := extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`)
-	gainLoss, _ := extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`)
+	withholdingTax := floatPtr(extractFloat(text, `Einbeh\. Steuer:\s*([\d.,]+)\s*EUR`))
+	gainLoss := floatPtr(extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`))
 	finalAmount, _ := extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`)
 
 	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
@@ -339,10 +339,11 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
+	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
 	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
@@ -426,10 +427,11 @@ func parseInterest(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 	}
 
 	// Extract withholding tax
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
+	withholdingTaxVal, err := extractFloat(text, `Einbeh\.\s*KESt\s*:\s*([\d\s.,]+)\s*[A-Z]{3}`)
 	if err != nil {
 		return nil, fmt.Errorf("withholding tax not found: %w", err)
 	}
+	withholdingTax := &withholdingTaxVal
 
 	// Extract withholding tax currency
 	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*KESt\s*:\s*[\d\s.,]+\s*([A-Z]{3})`)
@@ -543,12 +545,9 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		grossCurrency = "EUR"
 	}
 
-	// Extract withholding tax (Einbeh. Steuer)
-	withholdingTax, err := extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`)
-	if err != nil {
-		// Default to 0 if not found
-		withholdingTax = 0
-	}
+	// Extract withholding tax (Einbeh. Steuer). Absent stays nil rather than
+	// collapsing to 0, so "no tax line" is distinguishable from "0,00 EUR".
+	withholdingTax := floatPtr(extractFloat(text, `Einbeh\.\s*Steuer\s*:\s*([-\d\s.,]+)\s*[A-Z]{3}`))
 
 	// Extract withholding tax currency
 	withholdingTaxCurrency := extractString(text, `Einbeh\.\s*Steuer\s*:\s*[-\d\s.,]+\s*([A-Z]{3})`)
@@ -682,6 +681,16 @@ func dateField(text, label string) string {
 // eurField reads a "<label> [:] <amount> EUR" money line.
 func eurField(text, label string) (float64, error) {
 	return extractFloat(text, label+hSpace+`:?`+hSpace+`(-?[\d.,]+)`+hSpace+`EUR`)
+}
+
+// floatPtr adapts an (value, error) extraction pair to the nil-means-absent
+// convention: nil when the label was not found, otherwise a pointer to the
+// value — including a genuine 0,00.
+func floatPtr(v float64, err error) *float64 {
+	if err != nil {
+		return nil
+	}
+	return &v
 }
 
 // firstNonEmpty returns the first non-empty argument, or "".

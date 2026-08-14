@@ -95,6 +95,11 @@ For pure cash events with no trade — `DIVIDEND`, `INTEREST`,
 - `withholding_tax` — Tax withheld on the transaction (Einbeh. KESt on trades,
   Einbeh. Steuer on dividends and crypto)
 - `gain_loss` — Capital gain or loss (sell transactions)
+
+  Both are **omitted entirely when the document states no such line**, and
+  emitted as `0` when it states `0,00 EUR`. Those are different facts: a sale
+  closed exactly at cost has a real gain of zero. In `-format csv` the same
+  distinction appears as an empty cell versus `0`.
 - `exchange_rate` — Currency exchange rate (1.0 when the document has no Devisenkurs)
 - `final_amount` — Endbetrag, signed by cash direction: **negative for a buy**
 - `final_currency` — Currency of final amount
