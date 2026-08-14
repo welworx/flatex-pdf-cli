@@ -161,6 +161,24 @@ func TestValidateTransaction(t *testing.T) {
 			txn:     &schema.Transaction{DocumentType: "SAVINGSPLAN", Quantity: amt(1.4787), Price: amt(134.24), GrossCurrency: "EUR", GrossAmount: amt(200.00)},
 			wantErr: false,
 		},
+		{
+			name:    "ISIN with a correct check digit passes",
+			txn:     &schema.Transaction{DocumentType: "ORDER", ISIN: "US0378331005"},
+			wantErr: false,
+		},
+		{
+			name: "ISIN with a wrong check digit fails",
+			// One digit off from Apple's real ISIN (US0378331005): a value that
+			// landed in the wrong field, or one digit read wrong by the PDF
+			// extractor, produces exactly this.
+			txn:     &schema.Transaction{DocumentType: "ORDER", ISIN: "US0378331004"},
+			wantErr: true,
+		},
+		{
+			name:    "no ISIN is not this check's business",
+			txn:     &schema.Transaction{DocumentType: "CRYPTO"},
+			wantErr: false,
+		},
 	}
 
 	for _, tc := range tests {

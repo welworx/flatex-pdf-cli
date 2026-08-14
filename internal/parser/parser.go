@@ -854,6 +854,39 @@ func extractISIN(text string) string {
 	return extractString(text, pattern)
 }
 
+// isinChecksumValid reports whether s is a well-formed, 12-character ISIN
+// whose trailing check digit is correct under the Luhn algorithm, as ISO 6166
+// specifies.
+func isinChecksumValid(s string) bool {
+	if len(s) != 12 {
+		return false
+	}
+	digits := make([]byte, 0, 24)
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c >= '0' && c <= '9':
+			digits = append(digits, c-'0')
+		case c >= 'A' && c <= 'Z':
+			n := int(c-'A') + 10 // letter -> two-digit value (A=10 ... Z=35)
+			digits = append(digits, byte(n/10), byte(n%10))
+		default:
+			return false
+		}
+	}
+	sum := 0
+	for i, d := range digits {
+		v := int(d)
+		if (len(digits)-1-i)%2 == 1 { // double every second digit, from the check digit outward
+			v *= 2
+			if v > 9 {
+				v -= 9
+			}
+		}
+		sum += v
+	}
+	return sum%10 == 0
+}
+
 // extractWKN extracts a WKN (Wertpapierkennnummer) from text.
 // WKN format: [A-Z0-9]{6}
 func extractWKN(text string) string {

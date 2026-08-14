@@ -1195,3 +1195,25 @@ func TestFieldHelpersStayOnTheirLine(t *testing.T) {
 		t.Errorf("dateField reached across the line break and returned %q", got)
 	}
 }
+
+func TestIsinChecksumValid(t *testing.T) {
+	tests := []struct {
+		isin string
+		want bool
+	}{
+		{"US0378331005", true},   // Apple, real ISIN
+		{"US0378331004", false},  // last digit off by one
+		{"DE0008469008", true},   // real fixture ISIN
+		{"IE00B3RBWM25", true},   // real fixture ISIN
+		{"XFC000A2YY6Q", true},   // flatex's crypto pseudo-ISIN, still Luhn-valid
+		{"", false},              // too short
+		{"US037833100", false},   // 11 chars, too short
+		{"US03783310055", false}, // 13 chars, too long
+		{"US037833100!", false},  // non-alphanumeric
+	}
+	for _, tc := range tests {
+		if got := isinChecksumValid(tc.isin); got != tc.want {
+			t.Errorf("isinChecksumValid(%q) = %v, want %v", tc.isin, got, tc.want)
+		}
+	}
+}

@@ -90,6 +90,9 @@ func validate(txns []*schema.Transaction) error {
 }
 
 func validateTransaction(t *schema.Transaction) error {
+	if t.ISIN != "" && !isinChecksumValid(t.ISIN) {
+		return fmt.Errorf("ISIN %q fails its check digit: the statement layout may have changed", t.ISIN)
+	}
 	switch t.DocumentType {
 	case "TRADE":
 		// Kurs is only ever extracted in EUR. When Kurswert carries a foreign
