@@ -109,13 +109,10 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		return nil, fmt.Errorf("gross value not found: %w", err)
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
-	if err != nil {
-		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it is spelled 1.00 like other currency.
-		exchangeRate = schema.Computed(1)
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern (e.g., "IE000YU9K6K2/A3DP9J")
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -160,7 +157,7 @@ func parseTrade(doc *extractor.ExtractedDocument) (*schema.Transaction, error) {
 		GrossAmount:       ptr(grossValue),
 		WithholdingTax:    withholdingTax,
 		GainLoss:          gainLoss,
-		ExchangeRate:      ptr(exchangeRate),
+		ExchangeRate:      exchangeRate,
 		NetAmount:         finalAmount,
 		NetCurrency:       "EUR",
 		CustodyType:       extractString(text, `Verwahrart[^\S\n]*:[^\S\n]*([^\n*]+)`),
@@ -218,12 +215,10 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 	gainLoss := floatPtr(extractFloat(text, `Gewinn/Verlust:\s*(-?[\d.,]+)\s*EUR`))
 	finalAmount := floatPtr(extractFloat(text, `Endbetrag:\s*(-?[\d.,]+)\s*EUR`))
 
-	exchangeRate, err := extractFloat(text, `Devisenkurs:\s*([\d.,]+)`)
-	if err != nil {
-		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it is spelled 1.00 like other currency.
-		exchangeRate = schema.Computed(1)
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs:\s*([\d.,]+)`))
 
 	return &schema.Transaction{
 		OrderNumber:       extractString(text, `Nr\.([\d/]+)`),
@@ -242,7 +237,7 @@ func parseCrypto(doc *extractor.ExtractedDocument) (*schema.Transaction, error) 
 		Costs:          extractCosts(text),
 		WithholdingTax: withholdingTax,
 		GainLoss:       gainLoss,
-		ExchangeRate:   ptr(exchangeRate),
+		ExchangeRate:   exchangeRate,
 		NetAmount:      finalAmount,
 		NetCurrency:    "EUR",
 		CustodyType:    extractString(text, `Verwahrart:\s*([^\n*]+)`),
@@ -371,13 +366,10 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		netCurrency = "EUR"
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`)
-	if err != nil {
-		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it is spelled 1.00 like other currency.
-		exchangeRate = schema.Computed(1)
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -399,7 +391,7 @@ func parseDividend(doc *extractor.ExtractedDocument) (*schema.Transaction, error
 		WithholdingTaxCurrency: withholdingTaxCurrency,
 		NetAmount:              ptr(netAmount),
 		NetCurrency:            netCurrency,
-		ExchangeRate:           ptr(exchangeRate),
+		ExchangeRate:           exchangeRate,
 		ExDate:                 exDate,
 		ValueDate:              valueDate,
 	}
@@ -565,13 +557,10 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		withholdingTaxCurrency = "EUR"
 	}
 
-	// Extract exchange rate (optional, default to 1.0)
-	exchangeRate, err := extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`)
-	if err != nil {
-		// No Devisenkurs printed means a rate of 1 by definition — supplied
-		// here rather than read, so it is spelled 1.00 like other currency.
-		exchangeRate = schema.Computed(1)
-	}
+	// Devisenkurs, when the document prints one. A EUR settlement carries no
+	// such line, and the field is then absent rather than filled in with 1:
+	// an unstated rate is not an extracted value.
+	exchangeRate := floatPtr(extractFloat(text, `Devisenkurs\s*:\s*([\d\s.,]+)`))
 
 	// Extract WKN from ISIN/WKN pattern
 	wkn := extractString(text, `/([A-Z0-9]{6})[)\]]`)
@@ -591,7 +580,7 @@ func parseAccumulating(doc *extractor.ExtractedDocument) (*schema.Transaction, e
 		GrossCurrency:          grossCurrency,
 		WithholdingTax:         withholdingTax,
 		WithholdingTaxCurrency: withholdingTaxCurrency,
-		ExchangeRate:           ptr(exchangeRate),
+		ExchangeRate:           exchangeRate,
 		ExDate:                 exDate,
 		ValueDate:              valueDate,
 		AccrualDate:            accrualDate,
@@ -630,22 +619,16 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 
 		quantity := mustFloat(m[4])
 		price := mustFloat(m[5])
-		// The Betrag column is the cash that moved, not the value of the
-		// shares: a row settles (Betrag - charge) / Kurs shares and the
-		// Sammelabrechnung never prints the charge. Recovering it here keeps
-		// GrossAmount meaning the same thing it means on a trade confirmation
-		// (Kurswert, shares only) instead of silently folding a fee into the
-		// purchase price.
-		//
-		// Both the share value and the charge are exact: 1,478695 shares at
-		// 134,2400 is 198,5000168 to the ten places a six-place quantity times
-		// a four-place price actually has, and the charge is the 1,4999832
-		// left over. Snapping either to the cent, as this used to, reported a
-		// charge of 1,50 that the arithmetic never produced.
 		settled := mustFloat(m[6])
-		shareValue := schema.Mul(quantity, price)
-		charge, err := unitemisedCharge(tradeType, settled, shareValue)
-		if err != nil {
+
+		// A row prints Stücke, Ausf.-Kurs and Betrag and nothing else — no
+		// Kurswert line, no fee line. Those three are therefore all this row
+		// yields. The gap between the cash that moved and the value of the
+		// shares is the fee the document withholds, and it is checked for
+		// plausibility here, but it is not reported: a recovered figure is not
+		// an extracted one, and rebuilding it from a six-decimal quantity
+		// gives it digits it has not earned.
+		if err := checkSavingsPlanRow(tradeType, settled, schema.Mul(quantity, price)); err != nil {
 			return nil, fmt.Errorf("savings-plan row %s: %w", m[2], err)
 		}
 
@@ -657,36 +640,21 @@ func parseSavingsPlan(doc *extractor.ExtractedDocument) ([]*schema.Transaction, 
 		}
 
 		txns = append(txns, &schema.Transaction{
-			DocumentType:  "SAVINGSPLAN",
-			ISIN:          isin,
-			WKN:           wkn,
-			OrderNumber:   orderNumber,
-			SecurityName:  securityName,
-			Date:          convertGermanDate(m[2]), // Buchtag — the trade date of the row
-			ValueDate:     convertGermanDate(m[3]), // Valuta — settlement
-			Type:          tradeType,
-			Quantity:      ptr(quantity),
-			Price:         ptr(price),
-			GrossCurrency: "EUR",
-			// Both are worked out here rather than printed: the row states
-			// only Stücke, Kurs and Betrag.
-			GrossAmount: &shareValue,
-			// The row prints no Provision or Spesen line at all, so those stay
-			// at nothing — spelled 0.00 like every other currency figure
-			// rather than the bare 0 a zero-value Decimal renders.
-			Costs: &schema.Costs{
-				Provision:       schema.Computed(0),
-				OwnExpenses:     schema.Computed(0),
-				ForeignExpenses: schema.Computed(0),
-				Unitemised:      &charge,
-				Total:           charge,
-			},
-			NetAmount:   ptr(finalAmount),
-			NetCurrency: "EUR",
-			// Savings-plan rows are settled in EUR and carry no Devisenkurs
-			// line; without an explicit 1 the PP export writes an exchange
-			// rate of 0.
-			ExchangeRate: computed(1),
+			DocumentType: "SAVINGSPLAN",
+			ISIN:         isin,
+			WKN:          wkn,
+			OrderNumber:  orderNumber,
+			SecurityName: securityName,
+			Date:         convertGermanDate(m[2]), // Buchtag — the trade date of the row
+			ValueDate:    convertGermanDate(m[3]), // Valuta — settlement
+			Type:         tradeType,
+			Quantity:     ptr(quantity),
+			Price:        ptr(price),
+			NetAmount:    ptr(finalAmount), // Betrag — the cash the row moved
+			NetCurrency:  "EUR",
+			// No GrossAmount, no Costs and no ExchangeRate: the row prints no
+			// Kurswert, no charge line and no Devisenkurs, so there is nothing
+			// to report for any of them.
 		})
 	}
 
@@ -731,13 +699,6 @@ func floatPtr(v schema.Decimal, err error) *schema.Decimal {
 		return nil
 	}
 	return &v
-}
-
-// computed boxes a currency amount this package supplies rather than reads,
-// floored at two decimal places.
-func computed(v float64) *schema.Decimal {
-	d := schema.Computed(v)
-	return &d
 }
 
 // firstNonEmpty returns the first non-empty argument, or "".

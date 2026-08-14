@@ -85,10 +85,14 @@ Key fields (most are `omitempty`):
   `14`), so the raw JSON text is not byte-identical to a re-serialised
   `json.loads`/`json.dumps` round trip. They are ordinary JSON numbers and
   parse normally; only diff the parsed values, never the text.
-- Nothing is rounded, including derived figures. A `SAVINGSPLAN` row reports
-  `gross_amount: 198.5000168` and `costs.unitemised: 1.4999832` — the charge is
-  really 1,50 EUR, and the trailing digits are the printed quantity's rounding.
-  Round for display; do not treat those places as precision.
+- Nothing is rounded and nothing is invented: every number is printed on the
+  page or an exact sum of printed numbers (`costs.total` is the only sum). A
+  field the document does not state is **absent** — no Devisenkurs means no
+  `exchange_rate` key, not a default of 1. Use `.get()`, do not assume a key.
+- A `SAVINGSPLAN` row yields only `quantity`, `price` and `net_amount`; it
+  prints no Kurswert and no fee line, so it has no `gross_amount` and no
+  `costs`. `-format pp` still derives the withheld fee for Portfolio
+  Performance.
 - `-include-metadata` **fails** when a batch spans more than one depot, since
   one metadata block cannot describe two. Parse each depot separately, or drop
   the flag if you only need the transactions.

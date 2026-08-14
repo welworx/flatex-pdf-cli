@@ -77,10 +77,10 @@ func WritePortfolioTransactions(w io.Writer, txns []*schema.Transaction, lang st
 			t.ISIN,
 			t.WKN,
 			t.SecurityName,
-			formatAmount(t.TotalCosts(), lang),
+			formatAmount(ppFees(t), lang),
 			formatAmount(schema.Amount(t.WithholdingTax), lang),
-			t.GrossCurrency,
-			formatAmount(schema.Amount(t.ExchangeRate), lang),
+			ppCurrency(t),
+			formatAmount(ppExchangeRate(t), lang),
 			note(t),
 		}
 		if err := cw.Write(row); err != nil {
@@ -109,6 +109,56 @@ func portfolioValue(t *schema.Transaction) float64 {
 		return grossValue - t.TotalCosts()
 	}
 	return grossValue + t.TotalCosts()
+}
+
+// ppFees fills PP's Gebühren column. Most documents itemise their charges and
+// the column is just their total.
+//
+// A savings-plan row does not: it prints Stücke, Kurs and Betrag, and the fee
+// flatex withheld shows up only as the gap between the cash that moved and
+// what the shares are worth. The extracted transaction therefore carries no
+// charge for it — a figure no line of the document states is not something an
+// extractor should report. PP is a different audience: it is accounting for
+// what the purchase cost, and dropping the fee there would understate it. So
+// the gap is derived here, at the point it is needed, and rounded to the cent
+// because that is the unit a fee is actually charged in — the further places
+// are an artefact of the quantity being printed to six decimals.
+func ppFees(t *schema.Transaction) float64 {
+	if t.Costs != nil || t.DocumentType != "SAVINGSPLAN" {
+		return t.TotalCosts()
+	}
+	shareValue := schema.Amount(t.Quantity) * schema.Amount(t.Price)
+	gap := math.Abs(schema.Amount(t.NetAmount)) - shareValue
+	if t.Type == "SELL" {
+		gap = -gap
+	}
+	if gap < 0 {
+		return 0
+	}
+	return math.Round(gap*100) / 100
+}
+
+// ppCurrency fills PP's "Currency Gross Amount" column, falling back to the
+// settlement currency when the document states no gross amount to qualify —
+// a savings-plan row prints EUR against its Kurs and Betrag but has no
+// Kurswert line, so GrossCurrency is empty and NetCurrency is what it means.
+func ppCurrency(t *schema.Transaction) string {
+	if t.GrossCurrency != "" {
+		return t.GrossCurrency
+	}
+	return t.NetCurrency
+}
+
+// ppExchangeRate fills PP's Wechselkurs column. A document that settles in EUR
+// prints no Devisenkurs, so the extracted transaction carries none — the JSON
+// reports what the statement says and says nothing where it is silent. PP does
+// need a number here, and a blank or zero rate breaks its valuation, so the
+// implied 1 is supplied at the point it is actually required.
+func ppExchangeRate(t *schema.Transaction) float64 {
+	if t.ExchangeRate == nil {
+		return 1
+	}
+	return t.ExchangeRate.Float()
 }
 
 func ppTradeType(lang, tradeType string) (string, error) {

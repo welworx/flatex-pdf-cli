@@ -36,7 +36,7 @@ func main() {
 	includeSource := flag.Bool("include-source", false, "add source filename to each transaction")
 	includeMetadata := flag.Bool("include-metadata", false, "wrap output with depot metadata (json format only)")
 	quiet := flag.Bool("quiet", false, "hide skipped/problematic files; emit only valid JSON")
-	verbose := flag.Bool("verbose", false, "print progress to stderr: files parsed and any charge derived rather than read from the document")
+	verbose := flag.Bool("verbose", false, "print progress to stderr: how many files parsed")
 	flag.Parse()
 
 	args := flag.Args()
@@ -82,19 +82,6 @@ func main() {
 	if *verbose {
 		fmt.Fprintf(os.Stderr, "parsed %d transaction(s) from %d of %d file(s)\n",
 			len(transactions), len(pdfFiles)-len(errs), len(pdfFiles))
-		// Charges recovered from a settlement gap are the one set of figures
-		// here that the document never printed, so show the arithmetic that
-		// produced them rather than only the result.
-		for _, t := range transactions {
-			if t.Costs == nil || schema.Amount(t.Costs.Unitemised) == 0 {
-				continue
-			}
-			unitemised := schema.Amount(t.Costs.Unitemised)
-			fmt.Fprintf(os.Stderr, "%s %s %s: charge %.2f derived, %.2f settled less %.6f x %.2f in shares (not itemised by the document)\n",
-				t.DocumentType, t.Date, t.ISIN, unitemised,
-				schema.Amount(t.GrossAmount)+unitemised,
-				schema.Amount(t.Quantity), schema.Amount(t.Price))
-		}
 	}
 
 	if err := writeOutput(*format, *outputFile, *lang, transactions, metadata, *includeMetadata); err != nil {

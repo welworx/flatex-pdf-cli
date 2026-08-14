@@ -99,7 +99,7 @@ flatex-pdf-cli path/to/documents/
 - `-include-source` — Add source filename to each transaction
 - `-include-metadata` — Wrap output with depot metadata
 - `-quiet` — Hide skipped/problematic files; emit only valid JSON
-- `-verbose` — Print progress to stderr: files parsed, and any charge derived rather than read from the document
+- `-verbose` — Print progress to stderr: how many files parsed
 - `-version` — Show version and exit
 
 When given a directory, the tool processes every `.pdf` it finds. A file it
@@ -240,13 +240,14 @@ Five things worth knowing before you use the numbers:
 - **Numbers keep the document's own precision, and nothing is rounded.**
   `Kurs : 110,000000 EUR` emits as `110.000000` and `Ausgeführt : 14 St.` as
   `14`, because a price quoted to six places is a different claim from one
-  quoted to two. Figures this tool derives rather than reads (`costs.total`,
-  `costs.unitemised`, a savings plan's `gross_amount`) are computed in exact
-  decimal arithmetic and keep every place they have, padded to at least two
-  because they are currency. They are ordinary JSON numbers throughout, so a
-  consumer that does not care can ignore all of this. One caveat on the
-  savings-plan figures: see
-  [Known Limitations](#known-limitations).
+  quoted to two. They are ordinary JSON numbers throughout, so a consumer that
+  does not care can ignore all of this.
+- **Nothing is invented, either.** Every number is printed on the page, or an
+  exact sum of numbers printed on the page — `costs.total` is the only figure
+  of the second kind. A field the statement does not state is omitted rather
+  than filled in: no Devisenkurs means no `exchange_rate`, not a default of
+  `1`; a savings-plan row that prints only Stücke, Kurs and Betrag yields
+  exactly `quantity`, `price` and `net_amount`.
 - **`date` is the trade date** (`Handelstag`, or `Schlusstag`/`Buchtag` on
   crypto and savings plans) — not the date printed at the top of the letter.
   `order_date` (`Auftragsdatum`) and `value_date` (`Valuta`) are emitted
@@ -278,24 +279,20 @@ and crypto fields): **[docs/output-format.md](docs/output-format.md)**.
 
 ## Known Limitations
 
-- **Savings-plan charges are derived, not read — and their last places are
-  noise.** A `Sammelabrechnung aus` prints only the amount settled per row,
-  never a fee line: a 200,00 EUR execution at 134,2400 EUR buys 1,478695
-  shares, worth 198,5000168 EUR, and the missing 1,4999832 EUR is a charge the
-  document does not itemise. The parser recovers it as that gap and reports it
-  as `costs.unitemised`, kept separate from `provision` / `own_expenses` /
-  `foreign_expenses` because those carry a label the statement actually printed
-  and this one does not.
+- **Savings-plan rows carry no charge, because the document prints none.** A
+  `Sammelabrechnung aus` states only Stücke, Ausf.-Kurs and Betrag per row: a
+  200,00 EUR execution at 134,2400 EUR buys 1,478695 shares. flatex withholds a
+  fee — the shares are worth slightly less than the cash that moved — but no
+  line names it, so the JSON and CSV report `quantity`, `price` and
+  `net_amount` and nothing more. Earlier versions reconstructed the fee and a
+  `gross_amount` from those three; both are gone, since a figure no line of the
+  statement carries is not something an extractor should assert.
 
-  That charge is almost certainly exactly 1,50 EUR. The trailing digits come
-  from the quantity being printed to only six decimals, so a share value
-  rebuilt from it lands a fraction of a cent either side of the truth. They are
-  reported as computed rather than rounded away — which keeps `gross_amount +
-  costs.total` reconciling to the settled amount exactly — but treat anything
-  past the cent as noise, not precision. Run with `-verbose` to see the
-  arithmetic per row. A gap that is negative by more than a cent, or larger
-  than 5% of the amount settled, is treated as a layout change and fails the
-  parse rather than being booked as an implausible fee.
+  The gap is still computed as a sanity check on the column layout: one that is
+  negative by more than a cent, or larger than 5% of the amount settled, is
+  treated as a layout change and fails the parse. And the Portfolio Performance
+  export still derives the fee, rounded to the cent, because PP is accounting
+  for what the purchase cost.
 - **German-language PDFs only.** Document-type detection and field extraction
   are keyed to German labels (`Wertpapierabrechnung`, `Valuta`,
   `Devisenkurs`, …); non-German statements are detected and rejected with an

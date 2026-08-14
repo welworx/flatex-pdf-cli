@@ -18,17 +18,19 @@ type Costs struct {
 	OwnExpenses     Decimal `json:"own_expenses"`     // Eigene Spesen
 	ForeignExpenses Decimal `json:"foreign_expenses"` // Fremde Spesen
 
-	// Unitemised is a charge the document does not print as a line item,
-	// recovered as the gap between the amount settled and the value of the
-	// shares. Savings-plan settlements are the known case: a row buys
-	// (Betrag - charge) / Kurs shares and never names the charge. It is kept
-	// separate from the fields above because those carry a label the document
-	// actually printed, and this one does not: it is computed, not read.
-	// A pointer, unlike the printed charges above, because omitempty does not
-	// apply to a struct: only nil keeps it out of a settlement that has none.
-	Unitemised *Decimal `json:"unitemised,omitempty"`
-
-	Total Decimal `json:"total"` // Provision + Eigene + Fremde Spesen + Unitemised
+	// Total is the exact sum of the three charges above. It is the one figure
+	// in this package that no line of the document carries, and it is kept
+	// because it asserts nothing the printed lines do not already say.
+	//
+	// There was a fourth charge here, "unitemised", holding a savings plan's
+	// fee recovered as the gap between what the row settled and what its
+	// shares were worth. It has been removed: the Sammelabrechnung prints no
+	// such figure, so reporting one meant this extractor inventing a number,
+	// and reconstructing it from a six-decimal quantity gave it digits
+	// (1.4999832 for a fee of 1,50) that were noise dressed as precision. The
+	// gap is still computed — it is a good check that the columns landed where
+	// they should — but it is a check now, not output.
+	Total Decimal `json:"total"`
 
 	// ForeignExpensesBreakdown itemises ForeignExpenses and nothing else. The
 	// document marks the relationship with a footnote: the charge line reads

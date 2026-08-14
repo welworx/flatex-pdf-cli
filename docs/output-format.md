@@ -100,30 +100,44 @@ plain floats, `110,000000` and `14` both collapse and the distinction is gone.
 These are still ordinary JSON numbers (`1540.00` parses as `1540`), so a
 consumer that does not care about the digits does not have to do anything.
 
-**Nothing is rounded.** Values this tool derives rather than reads —
-`costs.total`, `costs.unitemised`, a savings plan's `gross_amount` — are
-computed in exact decimal arithmetic and reported with every place they have,
-padded to a minimum of two because they are currency. A savings-plan row of
-`1,478695` shares at `134,2400 EUR` gives a share value of `198.5000168` and a
-charge of `1.4999832`, not `198.50` and `1.50`.
+**Nothing is rounded, and nothing is invented.** This is an extractor: every
+number in the output is either printed on the page or an exact sum of numbers
+printed on the page.
 
-> **Read the last places with care.** A savings plan prints its quantity to six
-> decimals, so a share value rebuilt from it lands a fraction of a cent either
-> side of the truth. `1.4999832` is a charge that is almost certainly exactly
-> `1,50 EUR` — the trailing digits are the printed quantity's rounding, not
-> precision the statement has. They are reported as computed rather than
-> tidied away, which means the figures reconcile exactly
-> (`gross_amount + costs.total` is the settled amount to the cent) but the
-> final places carry no information. Round them yourself if you are presenting
-> the charge to a human.
+`costs.total` is the only figure of the second kind — `provision` plus
+`own_expenses` plus `foreign_expenses`, summed in exact decimal arithmetic so
+it is the true total rather than a float sum snapped back to the cent. It
+asserts nothing the itemised lines do not already say.
 
-The `exchange_rate` of `1.00` supplied when a document prints no Devisenkurs is
-in the same derived group.
+A field the document does not state is **absent**, not filled in:
 
-The Portfolio Performance export (`-format pp`) is deliberately exempt: it
-re-parses its columns and derives several of them, so it keeps shortest-form
-numbers. Padding there would round a fractional share count — `1.478695`
-shares is not `1.48`.
+| The document… | Result |
+|---|---|
+| prints no Devisenkurs | `exchange_rate` omitted — not defaulted to `1` |
+| prints no charge line (dividends, savings plans) | `costs` omitted entirely |
+| prints no Kurswert (savings plans) | `gross_amount` and `gross_currency` omitted |
+
+A savings-plan row is the clearest case: it prints Stücke, Ausf.-Kurs and
+Betrag, so `quantity`, `price` and `net_amount` are all it yields. Earlier
+versions reconstructed a `gross_amount` of `198.5000168` and a
+`costs.unitemised` fee of `1.4999832` from those three. Both have been removed
+— neither appears anywhere on the statement, and their trailing digits came
+from the quantity being printed to six decimals rather than from anything the
+document knows. The gap between the settled amount and the value of the shares
+is still computed as a sanity check on the column layout; it is simply not
+reported.
+
+The Portfolio Performance export (`-format pp`) plays by different rules,
+because it is not an extract — it is a file shaped for another program:
+
+- It **derives the savings-plan fee** the JSON omits, since PP is accounting
+  for what a purchase cost and leaving it out would understate the position.
+  Rounded to the cent there, and it never enters the JSON or CSV.
+- It **supplies an exchange rate of 1** where no Devisenkurs was printed, since
+  PP requires the column and a zero breaks its valuation.
+- It keeps **shortest-form numbers** rather than the document's precision: PP
+  re-parses these columns, and padding to the cent would round a fractional
+  share count — `1.478695` shares is not `1.48`.
 
 ## Withholding tax (Austrian KESt)
 
@@ -181,11 +195,14 @@ For pure cash events with no trade — `DIVIDEND`, `INTEREST`,
 
 ## Settlement Amounts (All Settled Documents)
 
-Every document that settles states a gross figure, its deductions, and the
-`Endbetrag` that actually moved. Those are **one set of fields shared by all
-document types**, not a separate set per type — a trade's `Kurswert` and a
-dividend's `Bruttoausschüttung` both land in `gross_amount`, and `Endbetrag`
-always lands in `net_amount`.
+Every document that settles states the amount that actually moved, and most
+also state a gross figure and its deductions. Those are **one set of fields
+shared by all document types**, not a separate set per type — a trade's
+`Kurswert` and a dividend's `Bruttoausschüttung` both land in `gross_amount`,
+and `Endbetrag` always lands in `net_amount`.
+
+Each is present only when its document prints it. A savings-plan row states a
+`Betrag` and no `Kurswert`, so it carries `net_amount` alone.
 
 - `gross_amount` — Kurswert on a trade (quantity × price, before costs),
   Bruttoausschüttung on a dividend; in either case the value before deductions
@@ -195,7 +212,7 @@ always lands in `net_amount`.
   [Withholding tax](#withholding-tax-austrian-kest)
 - `withholding_tax_currency` — Currency of `withholding_tax`
 - `gain_loss` — Capital gain or loss (sell transactions)
-- `exchange_rate` — Currency exchange rate (1.0 when the document has no Devisenkurs)
+- `exchange_rate` — Devisenkurs; omitted when the document prints none
 - `net_amount` — Endbetrag, signed by cash direction: **negative for a buy**
 - `net_currency` — Currency of `net_amount`
 - `costs` — Charge block; see [Costs](#costs)

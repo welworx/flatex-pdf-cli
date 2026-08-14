@@ -193,6 +193,43 @@ func TestWritePortfolioTransactionsGermanUsesSemicolonDelimiter(t *testing.T) {
 	}
 }
 
+// A savings-plan row prints no charge line, so the extracted transaction
+// carries no costs block at all. PP is accounting for what the purchase cost,
+// so the exporter derives the withheld fee from the gap between the cash that
+// moved and the value of the shares, and rounds it to the cent a fee is
+// actually charged in. Dropping it would understate the purchase.
+func TestWritePortfolioTransactionsDerivesSavingsPlanFee(t *testing.T) {
+	// 1,478695 shares at 134,2400 is 198.5000168 of stock against 200.00
+	// settled: a withheld fee of 1.50.
+	txns := []*schema.Transaction{{
+		DocumentType: "SAVINGSPLAN", ISIN: "IE00B3RBWM25", Date: "2025-01-15", Type: "BUY",
+		Quantity: amt(1.478695), Price: amt(134.24), NetAmount: amt(-200.00), NetCurrency: "EUR",
+	}}
+
+	var buf bytes.Buffer
+	if err := WritePortfolioTransactions(&buf, txns, "en"); err != nil {
+		t.Fatalf("WritePortfolioTransactions failed: %v", err)
+	}
+	row := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")[1]
+	fields := strings.Split(row, ",")
+
+	if got := fields[2]; got != "200" { // Value: the full cash movement
+		t.Errorf("Value = %q, want 200: %s", got, row)
+	}
+	if got := fields[7]; got != "1.5" { // Fees: derived, rounded to the cent
+		t.Errorf("Fees = %q, want 1.5: %s", got, row)
+	}
+	// The row has no Kurswert, so GrossCurrency is empty and the settlement
+	// currency is what the column means.
+	if got := fields[9]; got != "EUR" {
+		t.Errorf("Currency Gross Amount = %q, want EUR: %s", got, row)
+	}
+	// No Devisenkurs is printed either, but PP needs a rate and a 0 breaks it.
+	if got := fields[10]; got != "1" {
+		t.Errorf("Exchange Rate = %q, want 1: %s", got, row)
+	}
+}
+
 func TestWritePortfolioTransactionsGermanUsesCommaDecimalSeparator(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "SAVINGSPLAN", ISIN: "IE00B3RBWM25", Date: "2025-01-15", Type: "BUY", Quantity: amt(1.478695), Price: amt(134.24), GrossAmount: amt(200.00)},

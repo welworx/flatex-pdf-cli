@@ -605,32 +605,33 @@ func TestParseSavingsPlan(t *testing.T) {
 	if schema.Amount(a.Price) != 134.24 {
 		t.Errorf("Price = %f, want 134.24", schema.Amount(a.Price))
 	}
-	if a.GrossCurrency != "EUR" {
-		t.Errorf("GrossCurrency = %q, want EUR", a.GrossCurrency)
+	// Buys move cash out, matching NetAmount on a trade confirmation. Betrag
+	// is the one amount the row prints besides Stücke and Kurs.
+	if got := a.NetAmount.String(); got != "-200.00" {
+		t.Errorf("NetAmount = %s, want -200.00", got)
 	}
-	// GrossAmount is the value of the shares (Stücke x Kurs), not the Betrag
-	// column: the 200.00 settled buys 198.5000168 worth of shares, and the
-	// rest is a charge the Sammelabrechnung never prints as a line item.
+
+	// A row prints Stücke, Ausf.-Kurs and Betrag, so those three are all it
+	// yields. There is no Kurswert line, no charge line and no Devisenkurs, and
+	// this extractor reports none of them.
 	//
-	// Both are carried exactly. 1,478695 x 134,2400 has ten decimal places and
-	// the parser keeps the seven it needs; it used to snap them to 198.50 and
-	// report a charge of exactly 1.50, a rounder number than the document's
-	// own figures produce.
-	if got := a.GrossAmount.String(); got != "198.5000168" {
-		t.Errorf("GrossAmount = %s, want 198.5000168", got)
+	// GrossAmount and a costs block used to be reconstructed here: the shares
+	// were valued at 198.5000168 and the leftover 1.4999832 reported as a fee.
+	// Both were figures no line of the document carries, and their trailing
+	// places came from the quantity being printed to six decimals rather than
+	// from anything the statement knows. The gap is still checked (see
+	// TestSavingsPlanChargeBound); it is just not output.
+	if a.GrossAmount != nil {
+		t.Errorf("GrossAmount = %s, want none: the row prints no Kurswert", a.GrossAmount)
 	}
-	if a.Costs == nil {
-		t.Fatal("Costs = nil, want the derived charge")
+	if a.GrossCurrency != "" {
+		t.Errorf("GrossCurrency = %q, want empty: there is no gross amount to qualify", a.GrossCurrency)
 	}
-	if got := a.Costs.Unitemised.String(); got != "1.4999832" {
-		t.Errorf("Costs.Unitemised = %s, want 1.4999832", got)
+	if a.Costs != nil {
+		t.Errorf("Costs = %+v, want none: the row prints no charge line", a.Costs)
 	}
-	if got := a.Costs.Total.String(); got != "1.4999832" {
-		t.Errorf("Costs.Total = %s, want 1.4999832", got)
-	}
-	// Buys move cash out, matching NetAmount on a trade confirmation.
-	if schema.Amount(a.NetAmount) != -200.00 {
-		t.Errorf("NetAmount = %f, want -200.00", schema.Amount(a.NetAmount))
+	if a.ExchangeRate != nil {
+		t.Errorf("ExchangeRate = %s, want none: the row prints no Devisenkurs", a.ExchangeRate)
 	}
 
 	b := txs[1]
@@ -640,20 +641,15 @@ func TestParseSavingsPlan(t *testing.T) {
 	if b.Date != "2025-02-17" {
 		t.Errorf("Date = %q, want 2025-02-17", b.Date)
 	}
-	// 1,436948 x 138,1400 is 198.49999672 against a settled 198.50, so this row
-	// charged nothing. The gap is -0.00000328: the share value is rebuilt from
-	// a quantity the document rounds to six places, so it lands a fraction of
-	// a cent either side of the truth. That is reported as computed rather
-	// than nudged to zero, and the bound in unitemisedCharge tolerates it
-	// instead of reading it as a negative fee.
-	if got := b.GrossAmount.String(); got != "198.49999672" {
-		t.Errorf("GrossAmount = %s, want 198.49999672", got)
+	if got := b.NetAmount.String(); got != "198.50" {
+		t.Errorf("NetAmount = %s, want 198.50", got)
 	}
-	if got := b.Costs.Unitemised.String(); got != "-0.00000328" {
-		t.Errorf("Costs.Unitemised = %s, want -0.00000328", got)
-	}
-	if schema.Amount(b.NetAmount) != 198.50 {
-		t.Errorf("NetAmount = %f, want 198.50", schema.Amount(b.NetAmount))
+	// 1,436948 x 138,1400 is 198.49999672 against a settled 198.50: the gap is
+	// -0.00000328, negative only because the share value is rebuilt from a
+	// six-decimal quantity. checkSavingsPlanRow tolerates that rather than
+	// reading it as a negative fee, so the row parses.
+	if b.Costs != nil {
+		t.Errorf("Costs = %+v, want none", b.Costs)
 	}
 }
 

@@ -43,34 +43,33 @@ const austrianKEStRate = 0.275
 // loudly rather than be booked as a suspiciously large fee.
 const maxUnitemisedShare = 0.05
 
-// unitemisedCharge recovers the charge a settlement row does not print, as the
-// difference between the cash that moved and the value of the shares. A
-// purchase settles more than the shares are worth, a sale settles less, so the
-// charge is positive either way.
+// checkSavingsPlanRow verifies that a Sammelabrechnung row's columns landed
+// where they belong. A row prints Stücke, Ausf.-Kurs and Betrag; the shares are
+// worth slightly less than a purchase settled, or slightly more than a sale
+// settled, because flatex withholds a fee it never prints. That gap is
+// therefore small and one-signed, and a layout change that swapped the Kurs
+// and Betrag columns makes it neither.
 //
-// The subtraction is exact and the result keeps every place it has. It used to
-// be snapped to whole cents on the grounds that a share value reconstructed
-// from a printed quantity lands fractions of a cent off — true, but the fix
-// reported a charge the document's own figures never produced. The fractions
-// are what the statement implies; rounding them away invents a rounder number
-// than the arithmetic supports.
-func unitemisedCharge(tradeType string, settled, shareValue schema.Decimal) (schema.Decimal, error) {
+// The gap is computed and thrown away. It used to be reported as
+// costs.unitemised, which meant emitting a fee no line of the document carries
+// — and one whose digits were an artefact of the quantity being printed to six
+// places rather than precision the statement has.
+func checkSavingsPlanRow(tradeType string, settled, shareValue schema.Decimal) error {
 	charge := schema.Sub(settled, shareValue)
 	if tradeType == "SELL" {
 		charge = schema.Sub(shareValue, settled)
 	}
 	// The lower bound allows a cent of slack rather than demanding a
-	// non-negative charge. The share value is reconstructed from a quantity
-	// the document rounds to six places, so it lands a fraction of a cent
-	// either side of the truth: a row that really charged nothing can compute
-	// to -0.00000328. That is noise in the last places, not a negative fee,
-	// and it is far below the swapped-column error this bound exists to catch.
+	// non-negative gap: rebuilt from a six-decimal quantity, a row that really
+	// charged nothing computes to -0.00000328. That is noise in the last
+	// places, not a negative fee, and it is far below the swapped-column error
+	// this bound exists to catch.
 	if v := charge.Float(); v < -absTolerance || v > math.Abs(settled.Float())*maxUnitemisedShare {
-		return schema.Decimal{}, fmt.Errorf(
-			"settled amount %s and share value %s differ by %s, which is not a plausible unitemised charge: the statement layout may have changed",
+		return fmt.Errorf(
+			"settled amount %s and share value %s differ by %s, which is not a plausible withheld charge: the statement layout may have changed",
 			settled, shareValue, charge)
 	}
-	return charge, nil
+	return nil
 }
 
 // validate cross-checks amounts that a document states in more than one place.
