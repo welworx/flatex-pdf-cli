@@ -288,6 +288,7 @@ OPTIONS
   -include-source      add source filename to each transaction
   -include-metadata    wrap output with depot metadata (json format only)
   -quiet               hide skipped/problematic files; emit only valid JSON
+  -verbose             print progress to stderr: how many files parsed
   -version             show version and exit
   -help                show this help and exit
 

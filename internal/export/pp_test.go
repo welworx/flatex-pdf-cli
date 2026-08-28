@@ -156,6 +156,20 @@ func TestWritePortfolioTransactionsRejectsUnknownTradeType(t *testing.T) {
 	}
 }
 
+func TestPpDateFallback(t *testing.T) {
+	// TradeDate wins when present; a savings-plan row has no TradeDate and
+	// falls back to BookingDate; ValueDate is the last resort.
+	if got := ppDate(&schema.Transaction{TradeDate: "2024-06-15", BookingDate: "2024-06-16", ValueDate: "2024-06-17"}); got != "2024-06-15" {
+		t.Errorf("TradeDate: got %q, want 2024-06-15", got)
+	}
+	if got := ppDate(&schema.Transaction{BookingDate: "2024-06-16", ValueDate: "2024-06-17"}); got != "2024-06-16" {
+		t.Errorf("BookingDate fallback: got %q, want 2024-06-16", got)
+	}
+	if got := ppDate(&schema.Transaction{ValueDate: "2024-06-17"}); got != "2024-06-17" {
+		t.Errorf("ValueDate fallback: got %q, want 2024-06-17", got)
+	}
+}
+
 func TestWritePortfolioTransactionsGermanLang(t *testing.T) {
 	txns := []*schema.Transaction{
 		{DocumentType: "TRADE", ISIN: "IE000YU9K6K2", TradeDate: "2024-06-15", Type: "BUY", Quantity: amt(1), GrossAmount: amt(50), Costs: &schema.Costs{Provision: schema.Num(5, 2), Total: schema.Num(5, 2)}},
