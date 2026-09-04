@@ -32,12 +32,9 @@ type Decimal struct {
 	scale int
 }
 
-// Num builds an amount printed with scale decimal places. A negative scale is
-// clamped to zero.
+// Num builds an amount printed with scale decimal places. Every caller passes
+// scale as a literal or from ScaleOf, both always >= 0.
 func Num(value float64, scale int) Decimal {
-	if scale < 0 {
-		scale = 0
-	}
 	return Decimal{value: value, scale: scale}
 }
 
