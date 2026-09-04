@@ -13,7 +13,7 @@ TARGET=~/Documents/flatex-organized
 find ~/Downloads -name '*.pdf' | while IFS= read -r pdf; do
   json=$(flatex-pdf-cli -include-metadata -quiet "$pdf" 2>/dev/null) || continue
   account=$(jq -r '.metadata.depot_number // "unknown"' <<<"$json")
-  date=$(jq -r '.transactions[0].date' <<<"$json")
+  date=$(jq -r '.transactions[0] | .trade_date // .booking_date // .value_date' <<<"$json")
   type=$(jq -r '.transactions[0].document_type' <<<"$json")
   dest="$TARGET/$account"
   mkdir -p "$dest"
@@ -34,7 +34,7 @@ flatex-organize() {
   find "$src" -name '*.pdf' | while IFS= read -r pdf; do
     json=$(flatex-pdf-cli -include-metadata -quiet "$pdf" 2>/dev/null) || continue
     account=$(jq -r '.metadata.depot_number // "unknown"' <<<"$json")
-    date=$(jq -r '.transactions[0].date' <<<"$json")
+    date=$(jq -r '.transactions[0] | .trade_date // .booking_date // .value_date' <<<"$json")
     type=$(jq -r '.transactions[0].document_type' <<<"$json")
     dest="$target/$account"
     mkdir -p "$dest"
